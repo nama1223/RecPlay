@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { WORKER_URL, R2_PUBLIC_URL } from '../config'
+import { WORKER_URL, buildR2PublicUrl } from '../config'
 import { OrgInfo } from '../hooks/useOrgAuth'
 import { uploadToR2, UploadProgress } from '../utils/r2Upload'
 
@@ -22,10 +22,6 @@ function fmt(bytes: number) {
     : `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
-function buildR2Url(key: string) {
-  const base = R2_PUBLIC_URL.replace(/\/$/, '')
-  return base ? `${base}/${encodeURIComponent(key)}` : ''
-}
 
 export function FileListPage({ org, onFileSelect, onLogout }: Props) {
   const [files, setFiles] = useState<AudioFile[]>([])
@@ -58,7 +54,7 @@ export function FileListPage({ org, onFileSelect, onLogout }: Props) {
   useEffect(() => { load() }, [org.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSelect = (file: AudioFile) => {
-    const url = buildR2Url(file.key)
+    const url = buildR2PublicUrl(file.key)
     if (!url) {
       alert('R2公開URLが設定されていません（VITE_R2_PUBLIC_URL）')
       return

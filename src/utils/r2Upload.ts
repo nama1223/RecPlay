@@ -12,7 +12,8 @@ export async function uploadToR2(
   orgId?: string,
 ): Promise<string> {
   const timestamp = Date.now()
-  const safeName = file.name.replace(/[^\w.\-]/g, '_')
+  // R2キーで禁止されている文字と制御文字のみ除去（日本語などUnicode文字は保持）
+  const safeName = file.name.replace(/[/\\#%?&=+<>"'\x00-\x1f]/g, '_')
   const key = orgId ? `${orgId}/${timestamp}_${safeName}` : `${timestamp}_${safeName}`
 
   // Worker から署名付きアップロードURLを取得

@@ -3,9 +3,12 @@ export const WORKER_URL =
 
 export const R2_PUBLIC_URL = (import.meta.env.VITE_R2_PUBLIC_URL as string) ?? ''
 
-export function buildR2PublicUrl(filename: string): string {
+export function buildR2PublicUrl(key: string): string {
   const base = R2_PUBLIC_URL.replace(/\/$/, '')
-  return base ? `${base}/${encodeURIComponent(filename)}` : ''
+  if (!base) return ''
+  // キーの / はパス区切りなので各セグメントだけエンコード
+  const encoded = key.split('/').map(encodeURIComponent).join('/')
+  return `${base}/${encoded}`
 }
 
 /** アプリ内でファイルを開く共有URL（?url=...形式） */
