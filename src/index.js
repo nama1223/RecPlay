@@ -137,6 +137,45 @@ export default {
         return json({ id: org.id, name: org.name });
       }
 
+      // GET /audio?key={key} — R2から音声をストリーミング（Range対応）
+      if (method === 'GET' && pathname === '/audio') {
+        const key = url.searchParams.get('key');
+        if (!key) return new Response('missing key', { status: 400, headers: CORS_HEADERS });
+
+        const rangeHeader = request.headers.get('Range');
+        let obj;
+
+        if (rangeHeader) {
+          const m = rangeHeader.match(/bytes=(\d*)-(\d*)/);
+          if (m) {
+            const offset = m[1] ? parseInt(m[1]) : 0;
+            const endByte = m[2] ? parseInt(m[2]) : undefined;
+            const length = endByte !== undefined ? endByte - offset + 1 : undefined;
+            obj = await env.recplay_audio.get(key, { range: { offset, length } });
+          }
+        }
+        if (!obj) obj = await env.recplay_audio.get(key);
+        if (!obj) return new Response('Not Found', { status: 404, headers: CORS_HEADERS });
+
+        const contentType = obj.httpMetadata?.contentType ?? 'audio/mpeg';
+        const responseHeaders = {
+          ...CORS_HEADERS,
+          'Content-Type': contentType,
+          'Accept-Ranges': 'bytes',
+          'Cache-Control': 'public, max-age=3600',
+        };
+
+        if (rangeHeader && obj.range) {
+          const { offset, end } = obj.range;
+          responseHeaders['Content-Range'] = `bytes ${offset}-${end}/${obj.size}`;
+          responseHeaders['Content-Length'] = String(end - offset + 1);
+          return new Response(obj.body, { status: 206, headers: responseHeaders });
+        }
+
+        responseHeaders['Content-Length'] = String(obj.size);
+        return new Response(obj.body, { status: 200, headers: responseHeaders });
+      }
+
       // GET /files?org={orgId}
       if (method === 'GET' && pathname === '/files') {
         const orgId = url.searchParams.get('org');

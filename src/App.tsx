@@ -17,18 +17,25 @@ import { FileListPage } from './components/FileListPage'
 import { AdminPage } from './components/AdminPage'
 import { formatTime } from './utils/timeFormat'
 import { AppMode, Section } from './types'
-import { R2_PUBLIC_URL, WORKER_URL } from './config'
+import { R2_PUBLIC_URL, WORKER_URL, buildWorkerAudioUrl } from './config'
 import './App.css'
 
 type Screen = 'auth' | 'files' | 'admin' | 'player'
 
 function keyFromUrl(url: string): string | null {
-  const base = R2_PUBLIC_URL.replace(/\/$/, '')
-  if (!base) return null
   try {
-    const decoded = decodeURIComponent(url)
-    if (decoded.startsWith(base + '/')) return decoded.slice(base.length + 1)
-    return new URL(url).pathname.slice(1)
+    const parsed = new URL(url)
+    // Worker audio URL: .../audio?key=...
+    if (parsed.pathname.endsWith('/audio')) {
+      return parsed.searchParams.get('key')
+    }
+    // R2 public URL (legacy / direct link)
+    const base = R2_PUBLIC_URL.replace(/\/$/, '')
+    if (base) {
+      const decoded = decodeURIComponent(url)
+      if (decoded.startsWith(base + '/')) return decoded.slice(base.length + 1)
+    }
+    return null
   } catch {
     return null
   }
@@ -67,8 +74,11 @@ export default function App() {
     const key = keyFromUrl(decoded)
     const orgId = key?.split('/')[0]
 
+    // キーが取れた場合はWorker経由で再生、なければURLをそのまま使う
+    const audioUrl = key ? buildWorkerAudioUrl(key) : decoded
+
     const openPlayer = (detectedOrg?: OrgInfo) => {
-      loadUrl(decoded)
+      loadUrl(audioUrl)
       setFileName(decoded.split('/').pop() ?? decoded)
       setFileKey(key)
       setFileLoaded(true)

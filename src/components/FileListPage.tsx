@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { WORKER_URL, buildR2PublicUrl } from '../config'
+import { WORKER_URL, buildWorkerAudioUrl } from '../config'
 import { OrgInfo } from '../hooks/useOrgAuth'
 import { uploadToR2, UploadProgress } from '../utils/r2Upload'
 
@@ -54,12 +54,7 @@ export function FileListPage({ org, onFileSelect, onLogout }: Props) {
   useEffect(() => { load() }, [org.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSelect = (file: AudioFile) => {
-    const url = buildR2PublicUrl(file.key)
-    if (!url) {
-      alert('R2公開URLが設定されていません（VITE_R2_PUBLIC_URL）')
-      return
-    }
-    onFileSelect(url, file.key, file.name)
+    onFileSelect(buildWorkerAudioUrl(file.key), file.key, file.name)
   }
 
   const handleUploadSelect = (e: React.ChangeEvent<HTMLInputElement>) => {

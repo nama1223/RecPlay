@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { uploadToR2, UploadProgress } from '../utils/r2Upload'
-import { buildR2PublicUrl, buildAppShareUrl, R2_PUBLIC_URL } from '../config'
+import { buildR2PublicUrl, buildAppShareUrl, buildWorkerAudioUrl, R2_PUBLIC_URL } from '../config'
 
 interface Props {
   onFileLoad: (file: File) => void
@@ -180,7 +180,7 @@ export function FileLoader({ onFileLoad, onUrlLoad, orgId }: Props) {
                 <span className="upload-url-text">{r2Url}</span>
               </div>
 
-              <button className="primary-btn" onClick={() => r2Url && onUrlLoad(r2Url)}>
+              <button className="primary-btn" onClick={() => uploadedKey && onUrlLoad(buildWorkerAudioUrl(uploadedKey))}>
                 このファイルを今すぐ開く
               </button>
               <button className="secondary-btn" onClick={() => { setUploadFile(null); setUploadedKey(null); setProgress(null); setCopied(false) }}>
