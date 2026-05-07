@@ -1,10 +1,13 @@
-import { AppMode } from '../../types'
+import { AppMode, Section } from '../../types'
 
 interface Props {
   isPlaying: boolean
   mode: AppMode
+  currentTime: number
+  sections: Section[]
   onToggle: () => void
   onSkip: (delta: number) => void
+  onSeek: (time: number) => void
   skipValues: number[]
   activeSectionId: string | null
   onMarkStart: () => void
@@ -14,8 +17,11 @@ interface Props {
 export function PlaybackControls({
   isPlaying,
   mode,
+  currentTime,
+  sections,
   onToggle,
   onSkip,
+  onSeek,
   skipValues,
   activeSectionId,
   onMarkStart,
@@ -29,9 +35,19 @@ export function PlaybackControls({
     return abs >= 60 ? `${v > 0 ? '+' : ''}${v / 60}分` : `${v > 0 ? '+' : ''}${v}s`
   }
 
+  const handleBack = () => {
+    const threshold = currentTime - 0.5
+    const prev = sections
+      .map((s) => s.startTime)
+      .filter((t) => t < threshold)
+      .sort((a, b) => b - a)[0]
+    onSeek(prev ?? 0)
+  }
+
   return (
     <div className="controls-area">
       <div className="playback-controls">
+        <button className="skip-btn back-btn" onClick={handleBack} title="前の区間開始位置へ">⏮</button>
         {negatives.map((v) => (
           <button key={v} className="skip-btn" onClick={() => onSkip(v)}>{label(v)}</button>
         ))}

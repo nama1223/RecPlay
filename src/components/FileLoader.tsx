@@ -5,11 +5,12 @@ import { buildR2PublicUrl, buildAppShareUrl, R2_PUBLIC_URL } from '../config'
 interface Props {
   onFileLoad: (file: File) => void
   onUrlLoad: (url: string) => void
+  orgId?: string
 }
 
 type Tab = 'local' | 'url' | 'upload'
 
-export function FileLoader({ onFileLoad, onUrlLoad }: Props) {
+export function FileLoader({ onFileLoad, onUrlLoad, orgId }: Props) {
   const [tab, setTab] = useState<Tab>('local')
   const [url, setUrl] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
@@ -48,7 +49,7 @@ export function FileLoader({ onFileLoad, onUrlLoad }: Props) {
     setUploadError(null)
     setProgress({ loaded: 0, total: uploadFile.size, percent: 0 })
     try {
-      const key = await uploadToR2(uploadFile, (p) => setProgress(p))
+      const key = await uploadToR2(uploadFile, (p) => setProgress(p), orgId)
       setUploadedKey(key)
     } catch (e) {
       setUploadError(String(e))

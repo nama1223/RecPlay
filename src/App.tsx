@@ -1,25 +1,48 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAudioPlayer } from './hooks/useAudioPlayer'
 import { useSections } from './hooks/useSections'
 import { useSeekBar } from './hooks/useSeekBar'
 import { useSettings } from './hooks/useSettings'
 import { useWaveform } from './hooks/useWaveform'
+import { useSectionSync } from './hooks/useSectionSync'
 import { SeekBar } from './components/SeekBar/SeekBar'
 import { PlaybackControls } from './components/Controls/PlaybackControls'
 import { SectionList } from './components/Sections/SectionList'
 import { ModeSelector } from './components/ModeSelector'
 import { FileLoader } from './components/FileLoader'
 import { SettingsPanel } from './components/SettingsPanel'
+import { AuthPage, OrgInfo } from './components/AuthPage'
+import { FileListPage } from './components/FileListPage'
+import { AdminPage } from './components/AdminPage'
 import { formatTime } from './utils/timeFormat'
 import { AppMode, Section } from './types'
+import { R2_PUBLIC_URL } from './config'
 import './App.css'
 
+type Screen = 'auth' | 'files' | 'admin' | 'player'
+
+// Derive R2 key from a public R2 URL
+function keyFromUrl(url: string): string | null {
+  const base = R2_PUBLIC_URL.replace(/\/$/, '')
+  if (!base) return null
+  try {
+    const decoded = decodeURIComponent(url)
+    if (decoded.startsWith(base + '/')) return decoded.slice(base.length + 1)
+    // fallback: last path segment
+    return new URL(url).pathname.slice(1)
+  } catch {
+    return null
+  }
+}
+
 export default function App() {
+  const [screen, setScreen] = useState<Screen>('auth')
+  const [org, setOrg] = useState<OrgInfo | null>(null)
   const [mode, setMode] = useState<AppMode>('play')
   const [fileLoaded, setFileLoaded] = useState(false)
   const [fileName, setFileName] = useState('')
+  const [fileKey, setFileKey] = useState<string | null>(null)
   const [showFileLoader, setShowFileLoader] = useState(false)
-  const [activeSectionId, setActiveSectionId] = useState<string | null>(null)
 
   const {
     audioRef, currentTime, duration, isPlaying, src,
@@ -32,14 +55,23 @@ export default function App() {
   const { settings, updateSettings } = useSettings()
   const { samples: waveformSamples } = useWaveform(src, duration)
 
-  // URLパラメータから自動でファイルを開く
+  const onRemoteUpdate = useCallback((secs: Section[]) => {
+    importSections(secs)
+  }, [importSections])
+
+  useSectionSync(fileKey, mode, sections, onRemoteUpdate)
+
+  // ?url= param → jump straight to player
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const urlParam = params.get('url')
     if (urlParam) {
-      loadUrl(urlParam)
-      setFileName(decodeURIComponent(urlParam).split('/').pop() ?? urlParam)
+      const decoded = decodeURIComponent(urlParam)
+      loadUrl(decoded)
+      setFileName(decoded.split('/').pop() ?? decoded)
+      setFileKey(keyFromUrl(decoded))
       setFileLoaded(true)
+      setScreen('player')
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -59,15 +91,29 @@ export default function App() {
   const handleFileLoad = (file: File) => {
     loadFile(file)
     setFileName(file.name)
+    setFileKey(null) // local file → no sync
     setFileLoaded(true)
     setShowFileLoader(false)
+    setScreen('player')
   }
 
   const handleUrlLoad = (url: string) => {
-    loadUrl(url)
-    setFileName(decodeURIComponent(url).split('/').pop() ?? url)
+    const decoded = decodeURIComponent(url)
+    loadUrl(decoded)
+    setFileName(decoded.split('/').pop() ?? decoded)
+    setFileKey(keyFromUrl(decoded))
     setFileLoaded(true)
     setShowFileLoader(false)
+    setScreen('player')
+  }
+
+  const handleFileSelect = (url: string, key: string, name: string) => {
+    loadUrl(url)
+    setFileName(name)
+    setFileKey(key)
+    setFileLoaded(true)
+    setScreen('player')
+    importSections([])
   }
 
   const handleChangeFile = () => {
@@ -78,6 +124,9 @@ export default function App() {
   }
 
   const handleCloseFileLoader = () => setShowFileLoader(false)
+
+  // activeSectionId for mark-start/end
+  const [activeSectionId, setActiveSectionId] = useState<string | null>(null)
 
   const handleAddSection = () => {
     const start = currentTime
@@ -126,6 +175,42 @@ export default function App() {
     e.target.value = ''
   }
 
+  const handleLogout = () => {
+    sessionStorage.removeItem('adminPassword')
+    setOrg(null)
+    setScreen('auth')
+    setFileLoaded(false)
+    setFileName('')
+    setFileKey(null)
+    importSections([])
+  }
+
+  // ── Screens ──────────────────────────────────────────────────────────────
+
+  if (screen === 'auth') {
+    return (
+      <AuthPage
+        onAuth={(o) => { setOrg(o); setScreen('files') }}
+        onAdmin={() => setScreen('admin')}
+      />
+    )
+  }
+
+  if (screen === 'admin') {
+    return <AdminPage onLogout={handleLogout} />
+  }
+
+  if (screen === 'files' && org) {
+    return (
+      <FileListPage
+        org={org}
+        onFileSelect={handleFileSelect}
+        onLogout={handleLogout}
+      />
+    )
+  }
+
+  // ── Player ───────────────────────────────────────────────────────────────
   return (
     <div className="app">
       <audio ref={audioRef} src={src ?? undefined} preload="metadata" />
@@ -135,28 +220,34 @@ export default function App() {
         <ModeSelector mode={mode} onChange={setMode} />
       </header>
 
-      {/* ファイル選択モーダル */}
-      {(!fileLoaded || showFileLoader) && (
-        <div className={showFileLoader ? 'modal-overlay' : 'app-body'}>
-          {showFileLoader && (
-            <button className="modal-close" onClick={handleCloseFileLoader}>✕ キャンセル</button>
-          )}
+      {/* ファイル選択モーダル（変更時） */}
+      {showFileLoader && (
+        <div className="modal-overlay">
+          <button className="modal-close" onClick={handleCloseFileLoader}>✕ キャンセル</button>
           <FileLoader onFileLoad={handleFileLoad} onUrlLoad={handleUrlLoad} />
         </div>
       )}
 
-      {/* プレーヤー本体（ファイルロード済みかつモーダルが閉じている） */}
+      {/* プレーヤー本体 */}
       {fileLoaded && !showFileLoader && (
         <div className="player">
           <div className="file-bar">
             <span className="file-name" title={fileName}>{fileName}</span>
-            <button className="change-btn" onClick={handleChangeFile}>変更</button>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {org && (
+                <button className="change-btn" onClick={() => setScreen('files')}>
+                  ← 一覧
+                </button>
+              )}
+              <button className="change-btn" onClick={handleChangeFile}>変更</button>
+            </div>
           </div>
 
           <div className="time-bar">
             <span className="current-time">{formatTime(currentTime)}</span>
             <span className="time-sep">/</span>
             <span className="total-time">{formatTime(duration)}</span>
+            {fileKey && <span className="sync-indicator" title="区間データは自動同期されます">☁</span>}
           </div>
 
           <SeekBar
@@ -178,8 +269,11 @@ export default function App() {
             <PlaybackControls
               isPlaying={isPlaying}
               mode={mode}
+              currentTime={currentTime}
+              sections={sections}
               onToggle={togglePlayPause}
               onSkip={skip}
+              onSeek={seek}
               skipValues={settings.skipValues}
               activeSectionId={activeSectionId}
               onMarkStart={handleMarkStart}
@@ -210,6 +304,13 @@ export default function App() {
           {mode === 'settings' && (
             <SettingsPanel settings={settings} onUpdate={updateSettings} />
           )}
+        </div>
+      )}
+
+      {/* ファイル未ロード（?urlなし・プレーヤー起動） */}
+      {!fileLoaded && !showFileLoader && (
+        <div className="app-body">
+          <FileLoader onFileLoad={handleFileLoad} onUrlLoad={handleUrlLoad} />
         </div>
       )}
     </div>

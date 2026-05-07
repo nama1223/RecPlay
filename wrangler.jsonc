@@ -11,35 +11,32 @@
 		"nodejs_compat",
 		"global_fetch_strictly_public"
 	],
-	"assets": {
-		// The path to the directory containing the `index.html` file to be served at `/`
-		"directory": "./public"
-	},
 	"observability": {
 		"enabled": true
 	},
-	"upload_source_maps": true
+	"upload_source_maps": true,
+	"vars": {
+		"R2_ACCOUNT_ID": "4600f3a7aa72ec4fa62b3a9a24afb2b8",
+		"R2_BUCKET_NAME": "recording-player"
+	},
+	"r2_buckets": [
+		{
+			"bucket_name": "recplay-audio",
+			"binding": "recplay_audio",
+			"remote": true
+		}
+	],
+	"kv_namespaces": [
+		{
+			"binding": "RECPLAY_KV",
+			"id": "5410a23ebfdc46488258f6decb119b24",
+			"remote": true
+		}
+	]
 	/**
-	 * Smart Placement
-	 * https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement
+	 * Required secrets (set via: wrangler secret put SECRET_NAME)
+	 *   R2_ACCESS_KEY_ID     - R2 API token access key
+	 *   R2_SECRET_ACCESS_KEY - R2 API token secret key
+	 *   ADMIN_PASSWORD       - password for admin panel
 	 */
-	// "placement": {  "mode": "smart" }
-	/**
-	 * Bindings
-	 * Bindings allow your Worker to interact with resources on the Cloudflare Developer Platform, including
-	 * databases, object storage, AI inference, real-time communication and more.
-	 * https://developers.cloudflare.com/workers/runtime-apis/bindings/
-	 */
-	/**
-	 * Environment Variables
-	 * https://developers.cloudflare.com/workers/wrangler/configuration/#environment-variables
-	 * Note: Use secrets to store sensitive data.
-	 * https://developers.cloudflare.com/workers/configuration/secrets/
-	 */
-	// "vars": {  "MY_VARIABLE": "production_value" }
-	/**
-	 * Service Bindings (communicate between multiple Workers)
-	 * https://developers.cloudflare.com/workers/wrangler/configuration/#service-bindings
-	 */
-	// "services": [  {   "binding": "MY_SERVICE",   "service": "my-service"  } ]
 }

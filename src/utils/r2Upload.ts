@@ -9,11 +9,11 @@ export interface UploadProgress {
 export async function uploadToR2(
   file: File,
   onProgress?: (p: UploadProgress) => void,
+  orgId?: string,
 ): Promise<string> {
-  // タイムスタンプ付きでファイル名の衝突を防ぐ
   const timestamp = Date.now()
   const safeName = file.name.replace(/[^\w.\-]/g, '_')
-  const key = `${timestamp}_${safeName}`
+  const key = orgId ? `${orgId}/${timestamp}_${safeName}` : `${timestamp}_${safeName}`
 
   // Worker から署名付きアップロードURLを取得
   const res = await fetch(`${WORKER_URL}/upload`, {
