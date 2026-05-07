@@ -1,10 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { WORKER_URL } from '../config'
+import { OrgInfo, getStoredOrgs, storeOrg } from '../hooks/useOrgAuth'
 
-export interface OrgInfo {
-  id: string
-  name: string
-}
+export type { OrgInfo }
 
 interface Props {
   onAuth: (org: OrgInfo) => void
@@ -12,8 +10,7 @@ interface Props {
 }
 
 export function AuthPage({ onAuth, onAdmin }: Props) {
-  const [orgs, setOrgs] = useState<OrgInfo[]>([])
-  const [selectedOrg, setSelectedOrg] = useState<OrgInfo | null>(null)
+  const [storedOrgs, setStoredOrgs] = useState<OrgInfo[]>(getStoredOrgs)
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -21,27 +18,24 @@ export function AuthPage({ onAuth, onAdmin }: Props) {
   const [showAdmin, setShowAdmin] = useState(false)
   const [adminError, setAdminError] = useState('')
 
-  useEffect(() => {
-    fetch(`${WORKER_URL}/orgs`)
-      .then((r) => r.json())
-      .then((d) => setOrgs(d.orgs ?? []))
-      .catch(() => {})
-  }, [])
-
   const handleAuth = async () => {
-    if (!selectedOrg || !password) return
+    const pw = password.trim()
+    if (!pw) return
     setLoading(true)
     setError('')
     try {
       const res = await fetch(`${WORKER_URL}/auth`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orgId: selectedOrg.id, password }),
+        body: JSON.stringify({ password: pw }),
       })
       const data = await res.json()
       if (!res.ok) {
-        setError(data.error ?? 'ログイン失敗')
+        setError(data.error ?? 'パスワードが違います')
       } else {
+        storeOrg(data.org)
+        setStoredOrgs(getStoredOrgs())
+        setPassword('')
         onAuth(data.org)
       }
     } catch {
@@ -53,7 +47,6 @@ export function AuthPage({ onAuth, onAdmin }: Props) {
 
   const handleAdminLogin = async () => {
     setAdminError('')
-    // Verify by hitting admin orgs endpoint
     const res = await fetch(`${WORKER_URL}/admin/orgs`, {
       headers: { Authorization: `Bearer ${adminPw}` },
     })
@@ -70,43 +63,44 @@ export function AuthPage({ onAuth, onAdmin }: Props) {
       <div className="auth-card">
         <div className="file-loader-logo">🎵</div>
         <div className="file-loader-title">RecPlay</div>
-        <p className="file-loader-desc">演奏団体を選択してください</p>
+        <p className="file-loader-desc">練習録音の共有・編集プレーヤー</p>
 
-        {orgs.length === 0 && (
-          <p className="hint-text">団体情報を読み込み中...</p>
-        )}
-
-        <div className="org-list">
-          {orgs.map((org) => (
-            <button
-              key={org.id}
-              className={`org-btn ${selectedOrg?.id === org.id ? 'active' : ''}`}
-              onClick={() => { setSelectedOrg(org); setPassword(''); setError('') }}
-            >
-              {org.name}
-            </button>
-          ))}
-        </div>
-
-        {selectedOrg && (
-          <div className="auth-form">
-            <p className="auth-org-name">🎵 {selectedOrg.name}</p>
-            <input
-              className="url-input"
-              type="password"
-              placeholder="パスワード"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleAuth()}
-              autoFocus
-            />
-            {error && <p className="error-text">{error}</p>}
-            <button className="primary-btn" onClick={handleAuth} disabled={loading || !password}>
-              {loading ? '確認中...' : 'ログイン'}
-            </button>
+        {/* ログイン済み団体 */}
+        {storedOrgs.length > 0 && (
+          <div className="stored-orgs">
+            {storedOrgs.map((org) => (
+              <button
+                key={org.id}
+                className="org-btn"
+                onClick={() => onAuth(org)}
+              >
+                🎵 {org.name}
+              </button>
+            ))}
           </div>
         )}
 
+        {/* パスワード入力（新規ログイン） */}
+        <div className="auth-form">
+          {storedOrgs.length > 0 && (
+            <p className="auth-new-label">別の団体に入る</p>
+          )}
+          <input
+            className="url-input"
+            type="password"
+            placeholder="パスワードを入力"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleAuth()}
+            autoFocus={storedOrgs.length === 0}
+          />
+          {error && <p className="error-text">{error}</p>}
+          <button className="primary-btn" onClick={handleAuth} disabled={loading || !password.trim()}>
+            {loading ? '確認中...' : '入る'}
+          </button>
+        </div>
+
+        {/* 管理者ログイン */}
         <div className="admin-section">
           {!showAdmin ? (
             <button className="text-link" onClick={() => setShowAdmin(true)}>
@@ -127,6 +121,7 @@ export function AuthPage({ onAuth, onAdmin }: Props) {
               <button className="primary-btn" onClick={handleAdminLogin} disabled={!adminPw}>
                 管理者として入る
               </button>
+              <button className="text-link" onClick={() => setShowAdmin(false)}>キャンセル</button>
             </div>
           )}
         </div>

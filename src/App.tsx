@@ -1,34 +1,33 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useAudioPlayer } from './hooks/useAudioPlayer'
 import { useSections } from './hooks/useSections'
 import { useSeekBar } from './hooks/useSeekBar'
 import { useSettings } from './hooks/useSettings'
 import { useWaveform } from './hooks/useWaveform'
 import { useSectionSync } from './hooks/useSectionSync'
+import { OrgInfo, getStoredOrgs, storeOrg } from './hooks/useOrgAuth'
 import { SeekBar } from './components/SeekBar/SeekBar'
 import { PlaybackControls } from './components/Controls/PlaybackControls'
 import { SectionList } from './components/Sections/SectionList'
 import { ModeSelector } from './components/ModeSelector'
 import { FileLoader } from './components/FileLoader'
 import { SettingsPanel } from './components/SettingsPanel'
-import { AuthPage, OrgInfo } from './components/AuthPage'
+import { AuthPage } from './components/AuthPage'
 import { FileListPage } from './components/FileListPage'
 import { AdminPage } from './components/AdminPage'
 import { formatTime } from './utils/timeFormat'
 import { AppMode, Section } from './types'
-import { R2_PUBLIC_URL } from './config'
+import { R2_PUBLIC_URL, WORKER_URL } from './config'
 import './App.css'
 
 type Screen = 'auth' | 'files' | 'admin' | 'player'
 
-// Derive R2 key from a public R2 URL
 function keyFromUrl(url: string): string | null {
   const base = R2_PUBLIC_URL.replace(/\/$/, '')
   if (!base) return null
   try {
     const decoded = decodeURIComponent(url)
     if (decoded.startsWith(base + '/')) return decoded.slice(base.length + 1)
-    // fallback: last path segment
     return new URL(url).pathname.slice(1)
   } catch {
     return null
@@ -43,6 +42,7 @@ export default function App() {
   const [fileName, setFileName] = useState('')
   const [fileKey, setFileKey] = useState<string | null>(null)
   const [showFileLoader, setShowFileLoader] = useState(false)
+  const [activeSectionId, setActiveSectionId] = useState<string | null>(null)
 
   const {
     audioRef, currentTime, duration, isPlaying, src,
@@ -54,24 +54,47 @@ export default function App() {
   const { zoomIndex, zoomIn, zoomOut, secondsPerRow, numRows, initZoom } = useSeekBar(duration)
   const { settings, updateSettings } = useSettings()
   const { samples: waveformSamples } = useWaveform(src, duration)
-
-  const onRemoteUpdate = useCallback((secs: Section[]) => {
-    importSections(secs)
-  }, [importSections])
-
+  const onRemoteUpdate = useCallback((secs: Section[]) => importSections(secs), [importSections])
   useSectionSync(fileKey, mode, sections, onRemoteUpdate)
 
-  // ?url= param → jump straight to player
+  // ── ?url= パラメータ → 自動ログイン & 直接プレーヤー ──────────────────
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const urlParam = params.get('url')
-    if (urlParam) {
-      const decoded = decodeURIComponent(urlParam)
+    if (!urlParam) return
+
+    const decoded = decodeURIComponent(urlParam)
+    const key = keyFromUrl(decoded)
+    const orgId = key?.split('/')[0]
+
+    const openPlayer = (detectedOrg?: OrgInfo) => {
       loadUrl(decoded)
       setFileName(decoded.split('/').pop() ?? decoded)
-      setFileKey(keyFromUrl(decoded))
+      setFileKey(key)
       setFileLoaded(true)
+      if (detectedOrg) setOrg(detectedOrg)
       setScreen('player')
+    }
+
+    if (orgId && orgId.startsWith('org_')) {
+      // すでにLocalStorageにある？
+      const stored = getStoredOrgs()
+      const existing = stored.find((o) => o.id === orgId)
+      if (existing) {
+        openPlayer(existing)
+        return
+      }
+      // Worker から団体名を取得して自動ログイン
+      fetch(`${WORKER_URL}/org?id=${orgId}`)
+        .then((r) => r.ok ? r.json() : null)
+        .then((data) => {
+          const detectedOrg: OrgInfo | undefined = data ? { id: data.id, name: data.name } : undefined
+          if (detectedOrg) storeOrg(detectedOrg)
+          openPlayer(detectedOrg)
+        })
+        .catch(() => openPlayer())
+    } else {
+      openPlayer()
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -91,7 +114,7 @@ export default function App() {
   const handleFileLoad = (file: File) => {
     loadFile(file)
     setFileName(file.name)
-    setFileKey(null) // local file → no sync
+    setFileKey(null)
     setFileLoaded(true)
     setShowFileLoader(false)
     setScreen('player')
@@ -122,11 +145,6 @@ export default function App() {
     }
     setShowFileLoader(true)
   }
-
-  const handleCloseFileLoader = () => setShowFileLoader(false)
-
-  // activeSectionId for mark-start/end
-  const [activeSectionId, setActiveSectionId] = useState<string | null>(null)
 
   const handleAddSection = () => {
     const start = currentTime
@@ -185,7 +203,7 @@ export default function App() {
     importSections([])
   }
 
-  // ── Screens ──────────────────────────────────────────────────────────────
+  // ── 画面振り分け ─────────────────────────────────────────────────────────
 
   if (screen === 'auth') {
     return (
@@ -210,34 +228,30 @@ export default function App() {
     )
   }
 
-  // ── Player ───────────────────────────────────────────────────────────────
+  // ── プレーヤー ────────────────────────────────────────────────────────────
   return (
     <div className="app">
       <audio ref={audioRef} src={src ?? undefined} preload="metadata" />
 
       <header className="app-header">
-        <span className="app-title">🎵 RecPlay</span>
+        <span className="app-title">🎵 {org ? org.name : 'RecPlay'}</span>
         <ModeSelector mode={mode} onChange={setMode} />
       </header>
 
-      {/* ファイル選択モーダル（変更時） */}
       {showFileLoader && (
         <div className="modal-overlay">
-          <button className="modal-close" onClick={handleCloseFileLoader}>✕ キャンセル</button>
-          <FileLoader onFileLoad={handleFileLoad} onUrlLoad={handleUrlLoad} />
+          <button className="modal-close" onClick={() => setShowFileLoader(false)}>✕ キャンセル</button>
+          <FileLoader onFileLoad={handleFileLoad} onUrlLoad={handleUrlLoad} orgId={org?.id} />
         </div>
       )}
 
-      {/* プレーヤー本体 */}
       {fileLoaded && !showFileLoader && (
         <div className="player">
           <div className="file-bar">
             <span className="file-name" title={fileName}>{fileName}</span>
             <div style={{ display: 'flex', gap: 6 }}>
               {org && (
-                <button className="change-btn" onClick={() => setScreen('files')}>
-                  ← 一覧
-                </button>
+                <button className="change-btn" onClick={() => setScreen('files')}>← 一覧</button>
               )}
               <button className="change-btn" onClick={handleChangeFile}>変更</button>
             </div>
@@ -307,10 +321,9 @@ export default function App() {
         </div>
       )}
 
-      {/* ファイル未ロード（?urlなし・プレーヤー起動） */}
       {!fileLoaded && !showFileLoader && (
         <div className="app-body">
-          <FileLoader onFileLoad={handleFileLoad} onUrlLoad={handleUrlLoad} />
+          <FileLoader onFileLoad={handleFileLoad} onUrlLoad={handleUrlLoad} orgId={org?.id} />
         </div>
       )}
     </div>

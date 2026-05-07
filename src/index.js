@@ -116,14 +116,25 @@ export default {
         return json({ orgs: orgs.map((o) => ({ id: o.id, name: o.name })) });
       }
 
-      // POST /auth
+      // POST /auth — パスワードのみで団体を特定
       if (method === 'POST' && pathname === '/auth') {
-        const { orgId, password } = await request.json();
+        const { password } = await request.json();
         const raw = await env.RECPLAY_KV.get('orgs');
         const orgs = raw ? JSON.parse(raw) : [];
-        const org = orgs.find((o) => o.id === orgId && o.password === password);
+        const org = orgs.find((o) => o.password === password);
         if (!org) return json({ error: 'パスワードが違います' }, 401);
         return json({ ok: true, org: { id: org.id, name: org.name } });
+      }
+
+      // GET /org?id={orgId} — 団体名を公開取得（URL自動ログイン用）
+      if (method === 'GET' && pathname === '/org') {
+        const orgId = url.searchParams.get('id');
+        if (!orgId) return json({ error: 'missing id' }, 400);
+        const raw = await env.RECPLAY_KV.get('orgs');
+        const orgs = raw ? JSON.parse(raw) : [];
+        const org = orgs.find((o) => o.id === orgId);
+        if (!org) return json({ error: 'not found' }, 404);
+        return json({ id: org.id, name: org.name });
       }
 
       // GET /files?org={orgId}
