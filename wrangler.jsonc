@@ -17,7 +17,7 @@
 	"upload_source_maps": true,
 	"vars": {
 		"R2_ACCOUNT_ID": "4600f3a7aa72ec4fa62b3a9a24afb2b8",
-		"R2_BUCKET_NAME": "recording-player"
+		"R2_BUCKET_NAME": "recplay-audio"
 	},
 	"r2_buckets": [
 		{
