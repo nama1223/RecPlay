@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { uploadToR2, UploadProgress } from '../utils/r2Upload'
-import { buildR2PublicUrl, R2_PUBLIC_URL } from '../config'
+import { buildR2PublicUrl, buildAppShareUrl, R2_PUBLIC_URL } from '../config'
 
 interface Props {
   onFileLoad: (file: File) => void
@@ -15,12 +15,12 @@ export function FileLoader({ onFileLoad, onUrlLoad }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
   const uploadInputRef = useRef<HTMLInputElement>(null)
 
-  // アップロード状態
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   const [progress, setProgress] = useState<UploadProgress | null>(null)
-  const [uploadedUrl, setUploadedUrl] = useState<string | null>(null)
+  const [uploadedKey, setUploadedKey] = useState<string | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   const handleLocalFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -36,9 +36,10 @@ export function FileLoader({ onFileLoad, onUrlLoad }: Props) {
     const file = e.target.files?.[0]
     if (!file) return
     setUploadFile(file)
-    setUploadedUrl(null)
+    setUploadedKey(null)
     setUploadError(null)
     setProgress(null)
+    setCopied(false)
   }
 
   const handleUpload = async () => {
@@ -46,11 +47,9 @@ export function FileLoader({ onFileLoad, onUrlLoad }: Props) {
     setUploading(true)
     setUploadError(null)
     setProgress({ loaded: 0, total: uploadFile.size, percent: 0 })
-
     try {
       const key = await uploadToR2(uploadFile, (p) => setProgress(p))
-      const publicUrl = buildR2PublicUrl(key)
-      setUploadedUrl(publicUrl)
+      setUploadedKey(key)
     } catch (e) {
       setUploadError(String(e))
     } finally {
@@ -58,16 +57,23 @@ export function FileLoader({ onFileLoad, onUrlLoad }: Props) {
     }
   }
 
-  const formatBytes = (bytes: number) => {
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-    return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+  const copyUrl = (url: string) => {
+    navigator.clipboard.writeText(url)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
   }
 
+  const fmt = (bytes: number) =>
+    bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`
+
   const r2Configured = Boolean(R2_PUBLIC_URL)
+  const shareUrl = uploadedKey ? buildAppShareUrl(uploadedKey) : null
+  const r2Url = uploadedKey ? buildR2PublicUrl(uploadedKey) : null
 
   return (
     <div className="file-loader">
-      <div className="file-loader-logo">🎵 RecPlay</div>
+      <div className="file-loader-logo">🎵</div>
+      <div className="file-loader-title">RecPlay</div>
       <p className="file-loader-desc">練習録音の共有・編集プレーヤー</p>
 
       <div className="file-loader-tabs">
@@ -82,7 +88,6 @@ export function FileLoader({ onFileLoad, onUrlLoad }: Props) {
         </button>
       </div>
 
-      {/* ── ローカルファイル ── */}
       {tab === 'local' && (
         <div className="file-loader-body">
           <input ref={inputRef} type="file" accept="audio/*,.mp3" onChange={handleLocalFile} style={{ display: 'none' }} />
@@ -93,7 +98,6 @@ export function FileLoader({ onFileLoad, onUrlLoad }: Props) {
         </div>
       )}
 
-      {/* ── URLで開く ── */}
       {tab === 'url' && (
         <div className="file-loader-body">
           <input
@@ -104,13 +108,10 @@ export function FileLoader({ onFileLoad, onUrlLoad }: Props) {
             onChange={(e) => setUrl(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleUrlSubmit()}
           />
-          <button className="primary-btn" onClick={handleUrlSubmit}>
-            開く
-          </button>
+          <button className="primary-btn" onClick={handleUrlSubmit}>開く</button>
         </div>
       )}
 
-      {/* ── R2アップロード ── */}
       {tab === 'upload' && (
         <div className="file-loader-body">
           {!r2Configured && (
@@ -120,7 +121,7 @@ export function FileLoader({ onFileLoad, onUrlLoad }: Props) {
             </div>
           )}
 
-          {r2Configured && !uploadedUrl && (
+          {r2Configured && !uploadedKey && (
             <>
               <input
                 ref={uploadInputRef}
@@ -129,7 +130,6 @@ export function FileLoader({ onFileLoad, onUrlLoad }: Props) {
                 onChange={handleUploadSelect}
                 style={{ display: 'none' }}
               />
-
               {!uploadFile ? (
                 <button className="primary-btn" onClick={() => uploadInputRef.current?.click()}>
                   アップロードするMP3を選択
@@ -137,32 +137,22 @@ export function FileLoader({ onFileLoad, onUrlLoad }: Props) {
               ) : (
                 <div className="upload-selected">
                   <div className="upload-filename">📄 {uploadFile.name}</div>
-                  <div className="upload-filesize">{formatBytes(uploadFile.size)}</div>
-
+                  <div className="upload-filesize">{fmt(uploadFile.size)}</div>
                   {progress && (
                     <div className="progress-wrap">
                       <div className="progress-bar" style={{ width: `${progress.percent}%` }} />
                       <span className="progress-text">
-                        {progress.percent}% ({formatBytes(progress.loaded)} / {formatBytes(progress.total)})
+                        {progress.percent}% ({fmt(progress.loaded)} / {fmt(progress.total)})
                       </span>
                     </div>
                   )}
-
                   {uploadError && <div className="error-text">{uploadError}</div>}
-
                   <div className="upload-btns">
-                    <button
-                      className="primary-btn"
-                      onClick={handleUpload}
-                      disabled={uploading}
-                    >
+                    <button className="primary-btn" onClick={handleUpload} disabled={uploading}>
                       {uploading ? 'アップロード中...' : '↑ R2にアップロード'}
                     </button>
                     {!uploading && (
-                      <button
-                        className="secondary-btn"
-                        onClick={() => { setUploadFile(null); setProgress(null); setUploadError(null) }}
-                      >
+                      <button className="secondary-btn" onClick={() => { setUploadFile(null); setProgress(null); setUploadError(null) }}>
                         選び直す
                       </button>
                     )}
@@ -172,27 +162,27 @@ export function FileLoader({ onFileLoad, onUrlLoad }: Props) {
             </>
           )}
 
-          {/* アップロード完了 */}
-          {uploadedUrl && (
+          {r2Configured && uploadedKey && (
             <div className="upload-complete">
-              <div className="upload-success">✅ アップロード完了</div>
-              <p className="upload-share-label">共有URL（メンバーに送ってください）:</p>
+              <div className="upload-success">✅ アップロード完了！</div>
+
+              <p className="upload-share-label">📎 メンバーへの共有URL（アプリが開きます）</p>
               <div className="upload-url-box">
-                <span className="upload-url-text">{uploadedUrl}</span>
-                <button
-                  className="copy-btn"
-                  onClick={() => navigator.clipboard.writeText(uploadedUrl)}
-                >
-                  コピー
+                <span className="upload-url-text">{shareUrl}</span>
+                <button className="copy-btn" onClick={() => shareUrl && copyUrl(shareUrl)}>
+                  {copied ? '✓' : 'コピー'}
                 </button>
               </div>
-              <button className="primary-btn" onClick={() => onUrlLoad(uploadedUrl)}>
+
+              <p className="upload-share-label" style={{ marginTop: 8 }}>🔗 R2直リンク（MP3のみ）</p>
+              <div className="upload-url-box secondary">
+                <span className="upload-url-text">{r2Url}</span>
+              </div>
+
+              <button className="primary-btn" onClick={() => r2Url && onUrlLoad(r2Url)}>
                 このファイルを今すぐ開く
               </button>
-              <button
-                className="secondary-btn"
-                onClick={() => { setUploadFile(null); setUploadedUrl(null); setProgress(null) }}
-              >
+              <button className="secondary-btn" onClick={() => { setUploadFile(null); setUploadedKey(null); setProgress(null); setCopied(false) }}>
                 別のファイルをアップロード
               </button>
             </div>

@@ -10,10 +10,12 @@ interface Props {
   duration: number
   audioSrc: string
   editAdjustValues: number[]
+  isActive: boolean
   onPlay: (start: number, end: number) => void
   onUpdate: (id: string, updates: Partial<Section>) => void
   onDelete: (id: string) => void
   onToggleExclude: (id: string) => void
+  onActivate: (id: string) => void
 }
 
 export function SectionItem({
@@ -22,15 +24,34 @@ export function SectionItem({
   duration,
   audioSrc,
   editAdjustValues,
+  isActive,
   onPlay,
   onUpdate,
   onDelete,
   onToggleExclude,
+  onActivate,
 }: Props) {
   const [expanded, setExpanded] = useState(false)
   const [downloading, setDownloading] = useState(false)
   const [editingLabel, setEditingLabel] = useState(false)
   const [labelVal, setLabelVal] = useState(section.label)
+
+  const handleHeaderTap = () => {
+    onActivate(section.id)
+    setExpanded((v) => !v)
+  }
+
+  const handleLabelTap = (e: React.MouseEvent) => {
+    if (mode !== 'edit') return
+    e.stopPropagation()
+    onActivate(section.id)
+    setEditingLabel(true)
+  }
+
+  const saveLabel = () => {
+    onUpdate(section.id, { label: labelVal })
+    setEditingLabel(false)
+  }
 
   const handleDownload = async () => {
     if (!audioSrc) return
@@ -44,17 +65,12 @@ export function SectionItem({
     }
   }
 
-  const saveLabel = () => {
-    onUpdate(section.id, { label: labelVal })
-    setEditingLabel(false)
-  }
-
   return (
     <div
-      className={`section-item ${section.isExcluded ? 'excluded' : ''}`}
+      className={`section-item ${section.isExcluded ? 'excluded' : ''} ${isActive ? 'active' : ''}`}
       style={{ borderLeft: `4px solid ${section.color}` }}
     >
-      <div className="section-item-main" onClick={() => setExpanded((v) => !v)}>
+      <div className="section-item-main" onClick={handleHeaderTap}>
         <div className="section-item-info">
           {editingLabel ? (
             <input
@@ -68,10 +84,13 @@ export function SectionItem({
             />
           ) : (
             <span
-              className="section-label"
-              onDoubleClick={(e) => { e.stopPropagation(); setEditingLabel(true) }}
+              className={`section-label ${mode === 'edit' ? 'editable' : ''}`}
+              onClick={handleLabelTap}
+              title={mode === 'edit' ? 'タップで名前を編集' : undefined}
             >
-              {section.isExcluded ? '🚫 ' : ''}{section.label}
+              {section.isExcluded ? '🚫 ' : ''}
+              {section.label}
+              {mode === 'edit' && <span className="edit-hint"> ✏️</span>}
             </span>
           )}
           <span className="section-time">
@@ -85,19 +104,12 @@ export function SectionItem({
         <div className="section-item-actions">
           {mode === 'play' && (
             <>
-              <button
-                className="action-btn play"
-                onClick={() => onPlay(section.startTime, section.endTime)}
-              >
+              <button className="action-btn play" onClick={() => onPlay(section.startTime, section.endTime)}>
                 ▶ 区間再生
               </button>
               {audioSrc && (
-                <button
-                  className="action-btn download"
-                  onClick={handleDownload}
-                  disabled={downloading}
-                >
-                  {downloading ? '...' : '⬇ DL'}
+                <button className="action-btn download" onClick={handleDownload} disabled={downloading}>
+                  {downloading ? '...' : '⬇ クリップDL'}
                 </button>
               )}
             </>
@@ -109,7 +121,7 @@ export function SectionItem({
                 className={`action-btn ${section.isExcluded ? 'restore' : 'exclude'}`}
                 onClick={() => onToggleExclude(section.id)}
               >
-                {section.isExcluded ? '✓ 除外解除' : '🚫 除外'}
+                {section.isExcluded ? '✓ 除外を解除' : '🚫 除外区間に設定'}
               </button>
               <FlagEditor
                 section={section}
@@ -120,11 +132,9 @@ export function SectionItem({
               />
               <button
                 className="action-btn delete"
-                onClick={() => {
-                  if (confirm(`「${section.label}」を削除しますか？`)) onDelete(section.id)
-                }}
+                onClick={() => { if (confirm(`「${section.label}」を削除しますか？`)) onDelete(section.id) }}
               >
-                削除
+                🗑 削除
               </button>
             </>
           )}
