@@ -31,6 +31,8 @@ jobs:
         run: npm run build
         env:
           VITE_BASE_PATH: /${{ github.event.repository.name }}/
+          VITE_WORKER_URL: ${{ secrets.VITE_WORKER_URL }}
+          VITE_R2_PUBLIC_URL: ${{ secrets.VITE_R2_PUBLIC_URL }}
 
       - uses: actions/upload-pages-artifact@v3
         with:
