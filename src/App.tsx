@@ -214,34 +214,49 @@ export default function App() {
   }
 
   // ── 画面振り分け ─────────────────────────────────────────────────────────
+  // <audio> は全画面で常にDOMに存在させる（useAudioPlayerのuseEffectが初回レンダーで
+  // audioRef.currentを取得できないとイベントリスナーが登録されないため）
+
+  const audioEl = <audio ref={audioRef} src={src ?? undefined} preload="metadata" />
 
   if (screen === 'auth') {
     return (
-      <AuthPage
-        onAuth={(o) => { setOrg(o); setScreen('files') }}
-        onAdmin={() => setScreen('admin')}
-      />
+      <>
+        {audioEl}
+        <AuthPage
+          onAuth={(o) => { setOrg(o); setScreen('files') }}
+          onAdmin={() => setScreen('admin')}
+        />
+      </>
     )
   }
 
   if (screen === 'admin') {
-    return <AdminPage onLogout={handleLogout} />
+    return (
+      <>
+        {audioEl}
+        <AdminPage onLogout={handleLogout} />
+      </>
+    )
   }
 
   if (screen === 'files' && org) {
     return (
-      <FileListPage
-        org={org}
-        onFileSelect={handleFileSelect}
-        onLogout={handleLogout}
-      />
+      <>
+        {audioEl}
+        <FileListPage
+          org={org}
+          onFileSelect={handleFileSelect}
+          onLogout={handleLogout}
+        />
+      </>
     )
   }
 
   // ── プレーヤー ────────────────────────────────────────────────────────────
   return (
     <div className="app">
-      <audio ref={audioRef} src={src ?? undefined} preload="metadata" />
+      {audioEl}
 
       <header className="app-header">
         <span className="app-title">🎵 {org ? org.name : 'RecPlay'}</span>
