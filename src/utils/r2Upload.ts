@@ -12,29 +12,15 @@ export async function uploadToR2(
   orgId?: string,
 ): Promise<string> {
   const timestamp = Date.now()
-  // R2キーで禁止されている文字と制御文字のみ除去（日本語などUnicode文字は保持）
   const safeName = file.name.replace(/[/\\#%?&=+<>"'\x00-\x1f]/g, '_')
   const key = orgId ? `${orgId}/${timestamp}_${safeName}` : `${timestamp}_${safeName}`
 
-  // Worker から署名付きアップロードURLを取得
-  const res = await fetch(`${WORKER_URL}/upload`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ filename: key }),
-  })
+  const uploadUrl = `${WORKER_URL}/upload?key=${encodeURIComponent(key)}`
 
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`署名付きURL取得失敗 (${res.status}): ${text}`)
-  }
-
-  const { url } = (await res.json()) as { url: string }
-
-  // XHR でアップロード（進捗取得のため）
   await new Promise<void>((resolve, reject) => {
     const xhr = new XMLHttpRequest()
-    xhr.open('PUT', url)
-    xhr.setRequestHeader('Content-Type', 'audio/mpeg')
+    xhr.open('PUT', uploadUrl)
+    xhr.setRequestHeader('Content-Type', file.type || 'audio/mpeg')
 
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && onProgress) {

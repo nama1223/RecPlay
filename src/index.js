@@ -19,47 +19,6 @@ function json(data, status = 200) {
   );
 }
 
-// AWS Signature V4 presigned PUT URL (WebCrypto — no npm packages needed)
-async function createPresignedPutUrl(env, key, expiresIn = 3600) {
-  const { R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME } = env;
-  const region = 'auto';
-  const service = 's3';
-  const host = `${R2_BUCKET_NAME}.${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
-
-  const now = new Date();
-  const dateStr = now.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
-  const dateOnly = dateStr.slice(0, 8);
-  const credential = `${R2_ACCESS_KEY_ID}/${dateOnly}/${region}/${service}/aws4_request`;
-
-  const params = new URLSearchParams([
-    ['X-Amz-Algorithm', 'AWS4-HMAC-SHA256'],
-    ['X-Amz-Credential', credential],
-    ['X-Amz-Date', dateStr],
-    ['X-Amz-Expires', String(expiresIn)],
-    ['X-Amz-SignedHeaders', 'host'],
-  ]);
-
-  const encodedKey = key.split('/').map(encodeURIComponent).join('/');
-  const canonicalRequest = ['PUT', `/${encodedKey}`, params.toString(), `host:${host}\n`, 'host', 'UNSIGNED-PAYLOAD'].join('\n');
-
-  const sha256hex = async (str) => {
-    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
-    return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
-  };
-
-  const hmac = async (keyBytes, data) => {
-    const k = keyBytes instanceof Uint8Array ? keyBytes : new TextEncoder().encode(keyBytes);
-    const ck = await crypto.subtle.importKey('raw', k, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-    return new Uint8Array(await crypto.subtle.sign('HMAC', ck, new TextEncoder().encode(data)));
-  };
-
-  const stringToSign = ['AWS4-HMAC-SHA256', dateStr, `${dateOnly}/${region}/${service}/aws4_request`, await sha256hex(canonicalRequest)].join('\n');
-  const sigKey = await hmac(await hmac(await hmac(await hmac(`AWS4${R2_SECRET_ACCESS_KEY}`, dateOnly), region), service), 'aws4_request');
-  const signature = Array.from(await hmac(sigKey, stringToSign)).map((b) => b.toString(16).padStart(2, '0')).join('');
-
-  params.append('X-Amz-Signature', signature);
-  return `https://${host}/${encodedKey}?${params.toString()}`;
-}
 
 function isAdmin(request, env) {
   return request.headers.get('Authorization') === `Bearer ${env.ADMIN_PASSWORD}`;
@@ -80,12 +39,15 @@ export default {
     }
 
     try {
-      // POST /upload — presigned PUT URL for R2 file upload
-      if (method === 'POST' && pathname === '/upload') {
-        const { filename } = await request.json();
-        if (!filename) return json({ error: 'missing filename' }, 400);
-        const presignedUrl = await createPresignedPutUrl(env, filename);
-        return json({ url: presignedUrl, key: filename });
+      // PUT /upload?key={key} — ファイルをR2ネイティブバインディングで直接保存
+      if (method === 'PUT' && pathname === '/upload') {
+        const key = url.searchParams.get('key');
+        if (!key) return json({ error: 'missing key' }, 400);
+        const contentType = request.headers.get('Content-Type') ?? 'audio/mpeg';
+        await env.recplay_audio.put(key, request.body, {
+          httpMetadata: { contentType },
+        });
+        return json({ ok: true, key });
       }
 
       // GET /sections?file={key}
