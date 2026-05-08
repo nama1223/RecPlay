@@ -17,11 +17,11 @@
 	"upload_source_maps": true,
 	"vars": {
 		"R2_ACCOUNT_ID": "4600f3a7aa72ec4fa62b3a9a24afb2b8",
-		"R2_BUCKET_NAME": "recplay-audio"
+		"R2_BUCKET_NAME": "recording-player"
 	},
 	"r2_buckets": [
 		{
-			"bucket_name": "recplay-audio",
+			"bucket_name": "recording-player",
 			"binding": "recplay_audio",
 			"remote": true
 		}
