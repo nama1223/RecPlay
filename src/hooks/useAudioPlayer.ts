@@ -109,6 +109,12 @@ export function useAudioPlayer() {
     setSrc(url)
     setCurrentTime(0)
     setDuration(0)
+    // 同じURLを再度開いたときReactがsrc属性を更新しないケースに対応
+    const audio = audioRef.current
+    if (audio) {
+      audio.src = url
+      audio.load()
+    }
   }, [])
 
   const setExcludedZones = useCallback((zones: ExcludedZone[]) => {

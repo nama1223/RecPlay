@@ -99,6 +99,23 @@ export default {
         return json({ id: org.id, name: org.name });
       }
 
+      // HEAD /audio?key={key} — ファイルサイズ取得（ダウンロード機能用）
+      if (method === 'HEAD' && pathname === '/audio') {
+        const key = url.searchParams.get('key');
+        if (!key) return new Response(null, { status: 400, headers: CORS_HEADERS });
+        const obj = await env.recplay_audio.head(key);
+        if (!obj) return new Response(null, { status: 404, headers: CORS_HEADERS });
+        return new Response(null, {
+          status: 200,
+          headers: {
+            ...CORS_HEADERS,
+            'Content-Type': obj.httpMetadata?.contentType ?? 'audio/mpeg',
+            'Content-Length': String(obj.size),
+            'Accept-Ranges': 'bytes',
+          },
+        });
+      }
+
       // GET /audio?key={key} — R2から音声を配信（Range対応、duration検出のためバッファ返却）
       if (method === 'GET' && pathname === '/audio') {
         const key = url.searchParams.get('key');
