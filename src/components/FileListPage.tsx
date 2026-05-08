@@ -64,15 +64,15 @@ export function FileListPage({ org, onFileSelect, onLogout }: Props) {
     setUploadError(null)
     setProgress(null)
     setUploadDone(false)
+    doUpload(file)
   }
 
-  const handleUpload = async () => {
-    if (!uploadFile) return
+  const doUpload = async (file: File) => {
     setUploading(true)
     setUploadError(null)
-    setProgress({ loaded: 0, total: uploadFile.size, percent: 0 })
+    setProgress({ loaded: 0, total: file.size, percent: 0 })
     try {
-      await uploadToR2(uploadFile, (p) => setProgress(p), org.id)
+      await uploadToR2(file, (p) => setProgress(p), org.id)
       setUploadDone(true)
       setUploadFile(null)
       load()
@@ -81,6 +81,11 @@ export function FileListPage({ org, onFileSelect, onLogout }: Props) {
     } finally {
       setUploading(false)
     }
+  }
+
+  const handleUpload = async () => {
+    if (!uploadFile) return
+    doUpload(uploadFile)
   }
 
   const resetUpload = () => {
@@ -125,26 +130,25 @@ export function FileListPage({ org, onFileSelect, onLogout }: Props) {
                 </button>
               )}
 
-              {uploadFile && !uploadDone && (
+              {(uploadFile || uploading) && !uploadDone && (
                 <>
-                  <div className="upload-filename">📄 {uploadFile.name} ({fmt(uploadFile.size)})</div>
+                  {uploadFile && <div className="upload-filename">📄 {uploadFile.name} ({fmt(uploadFile.size)})</div>}
                   {progress && (
                     <div className="progress-wrap">
                       <div className="progress-bar" style={{ width: `${progress.percent}%` }} />
                       <span className="progress-text">
-                        {progress.percent}% ({fmt(progress.loaded)} / {fmt(progress.total)})
+                        {uploading ? `アップロード中... ${progress.percent}% (${fmt(progress.loaded)} / ${fmt(progress.total)})` : `${progress.percent}%`}
                       </span>
                     </div>
                   )}
-                  {uploadError && <div className="error-text">{uploadError}</div>}
-                  <div className="upload-btns">
-                    <button className="primary-btn" onClick={handleUpload} disabled={uploading}>
-                      {uploading ? 'アップロード中...' : '↑ アップロード'}
-                    </button>
-                    {!uploading && (
-                      <button className="secondary-btn" onClick={resetUpload}>選び直す</button>
-                    )}
-                  </div>
+                  {uploadError && (
+                    <div className="error-text">
+                      {uploadError}
+                      <button className="secondary-btn" style={{ marginTop: 8 }} onClick={() => uploadInputRef.current?.click()}>
+                        やり直す
+                      </button>
+                    </div>
+                  )}
                 </>
               )}
 

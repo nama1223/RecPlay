@@ -14,6 +14,7 @@ export function useAudioPlayer() {
 
   useEffect(() => {
     const audio = audioRef.current
+    console.log('[useAudioPlayer] effect ran, audioRef.current =', audio)
     if (!audio) return
 
     const onTimeUpdate = () => {
@@ -37,6 +38,7 @@ export function useAudioPlayer() {
     }
 
     const onDurationChange = () => {
+      console.log('[useAudioPlayer] durationchange fired, audio.duration =', audio.duration, 'isFinite =', isFinite(audio.duration))
       if (isFinite(audio.duration)) setDuration(audio.duration)
     }
     const onPlay = () => setIsPlaying(true)
@@ -103,6 +105,7 @@ export function useAudioPlayer() {
   }, [])
 
   const loadUrl = useCallback((url: string) => {
+    console.log('[useAudioPlayer] loadUrl called, url =', url)
     setSrc(url)
     setCurrentTime(0)
     setDuration(0)
