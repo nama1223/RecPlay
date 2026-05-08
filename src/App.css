@@ -135,7 +135,6 @@
 
 /* ── SeekBar ── */
 .seekbar-wrapper {
-  flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -178,10 +177,35 @@
 }
 
 .seekbar-scroll {
-  flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
+}
+
+.seekbar-resize-handle {
+  height: 10px;
+  cursor: ns-resize;
+  background: #1a1a38;
+  border-top: 1px solid #2a1e52;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  user-select: none;
+  touch-action: none;
+}
+
+.seekbar-resize-handle::after {
+  content: '';
+  display: block;
+  width: 40px;
+  height: 3px;
+  border-radius: 2px;
+  background: #3a2a6a;
+}
+
+.seekbar-resize-handle:hover::after {
+  background: #7c3aed;
 }
 
 .seekbar-container {
