@@ -128,9 +128,11 @@ export default {
         };
 
         if (rangeHeader && obj.range) {
-          const { offset, end } = obj.range;
-          responseHeaders['Content-Range'] = `bytes ${offset}-${end}/${obj.size}`;
-          responseHeaders['Content-Length'] = String(end - offset + 1);
+          const rangeOffset = obj.range.offset ?? 0;
+          const rangeLength = obj.range.length ?? obj.size;
+          const rangeEnd = rangeOffset + rangeLength - 1;
+          responseHeaders['Content-Range'] = `bytes ${rangeOffset}-${rangeEnd}/${obj.size}`;
+          responseHeaders['Content-Length'] = String(rangeLength);
           return new Response(obj.body, { status: 206, headers: responseHeaders });
         }
 
