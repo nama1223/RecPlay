@@ -208,6 +208,21 @@ export default {
         return json({ ok: true });
       }
 
+      // GET /ping — 診断用エンドポイント
+      if (method === 'GET' && pathname === '/ping') {
+        try {
+          const list = await env.recplay_audio.list({ limit: 3 });
+          return json({
+            ok: true,
+            bucket_binding: 'recplay_audio',
+            objects_count: list.objects.length,
+            sample_keys: list.objects.map((o) => o.key),
+          });
+        } catch (e) {
+          return json({ ok: false, error: String(e) });
+        }
+      }
+
       return new Response('Not Found', { status: 404 });
     } catch (err) {
       return json({ error: String(err) }, 500);
