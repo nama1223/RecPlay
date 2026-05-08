@@ -99,45 +99,53 @@ export default {
         return json({ id: org.id, name: org.name });
       }
 
-      // GET /audio?key={key} — R2から音声をストリーミング（Range対応）
+      // GET /audio?key={key} — R2から音声を配信（Range対応、duration検出のためバッファ返却）
       if (method === 'GET' && pathname === '/audio') {
         const key = url.searchParams.get('key');
         if (!key) return new Response('missing key', { status: 400, headers: CORS_HEADERS });
 
         const rangeHeader = request.headers.get('Range');
-        let obj;
+        const MAX_CHUNK = 2 * 1024 * 1024; // 2MB上限（chunked転送を避けてContent-Lengthを保証）
 
         if (rangeHeader) {
           const m = rangeHeader.match(/bytes=(\d*)-(\d*)/);
           if (m) {
             const offset = m[1] ? parseInt(m[1]) : 0;
             const endByte = m[2] ? parseInt(m[2]) : undefined;
-            const length = endByte !== undefined ? endByte - offset + 1 : undefined;
-            obj = await env.recplay_audio.get(key, { range: { offset, length } });
+            const requested = endByte !== undefined ? endByte - offset + 1 : MAX_CHUNK;
+            const length = Math.min(requested, MAX_CHUNK);
+            const obj = await env.recplay_audio.get(key, { range: { offset, length } });
+            if (!obj) return new Response('Not Found', { status: 404, headers: CORS_HEADERS });
+            const body = await obj.arrayBuffer();
+            const actualOffset = obj.range?.offset ?? offset;
+            const rangeEnd = actualOffset + body.byteLength - 1;
+            return new Response(body, {
+              status: 206,
+              headers: {
+                ...CORS_HEADERS,
+                'Content-Type': obj.httpMetadata?.contentType ?? 'audio/mpeg',
+                'Accept-Ranges': 'bytes',
+                'Content-Range': `bytes ${actualOffset}-${rangeEnd}/${obj.size}`,
+                'Content-Length': String(body.byteLength),
+                'Cache-Control': 'public, max-age=3600',
+              },
+            });
           }
         }
-        if (!obj) obj = await env.recplay_audio.get(key);
+
+        // Rangeなし: ストリーミング（ブラウザが直接アクセスする場合など）
+        const obj = await env.recplay_audio.get(key);
         if (!obj) return new Response('Not Found', { status: 404, headers: CORS_HEADERS });
-
-        const contentType = obj.httpMetadata?.contentType ?? 'audio/mpeg';
-        const responseHeaders = {
-          ...CORS_HEADERS,
-          'Content-Type': contentType,
-          'Accept-Ranges': 'bytes',
-          'Cache-Control': 'public, max-age=3600',
-        };
-
-        if (rangeHeader && obj.range) {
-          const rangeOffset = obj.range.offset ?? 0;
-          const rangeLength = obj.range.length ?? obj.size;
-          const rangeEnd = rangeOffset + rangeLength - 1;
-          responseHeaders['Content-Range'] = `bytes ${rangeOffset}-${rangeEnd}/${obj.size}`;
-          responseHeaders['Content-Length'] = String(rangeLength);
-          return new Response(obj.body, { status: 206, headers: responseHeaders });
-        }
-
-        responseHeaders['Content-Length'] = String(obj.size);
-        return new Response(obj.body, { status: 200, headers: responseHeaders });
+        return new Response(obj.body, {
+          status: 200,
+          headers: {
+            ...CORS_HEADERS,
+            'Content-Type': obj.httpMetadata?.contentType ?? 'audio/mpeg',
+            'Accept-Ranges': 'bytes',
+            'Content-Length': String(obj.size),
+            'Cache-Control': 'public, max-age=3600',
+          },
+        });
       }
 
       // GET /files?org={orgId}
