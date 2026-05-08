@@ -16,18 +16,29 @@ interface Props {
   onLogout: () => void
 }
 
+type SortField = 'date' | 'name' | 'size'
+type SortDir = 'asc' | 'desc'
+
 function fmt(bytes: number) {
   return bytes < 1024 * 1024
     ? `${(bytes / 1024).toFixed(1)} KB`
     : `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
-
 export function FileListPage({ org, onFileSelect, onLogout }: Props) {
   const [files, setFiles] = useState<AudioFile[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showUpload, setShowUpload] = useState(false)
+
+  // Sort state (default: newest first)
+  const [sortField, setSortField] = useState<SortField>('date')
+  const [sortDir, setSortDir] = useState<SortDir>('desc')
+
+  // Rename state
+  const [renamingKey, setRenamingKey] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  const [renaming, setRenaming] = useState(false)
 
   // Upload state
   const uploadInputRef = useRef<HTMLInputElement>(null)
@@ -53,10 +64,66 @@ export function FileListPage({ org, onFileSelect, onLogout }: Props) {
 
   useEffect(() => { load() }, [org.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Compute sorted files
+  const sortedFiles = [...files].sort((a, b) => {
+    let cmp = 0
+    if (sortField === 'name') cmp = a.name.localeCompare(b.name, 'ja')
+    else if (sortField === 'date') cmp = new Date(a.uploadedAt).getTime() - new Date(b.uploadedAt).getTime()
+    else if (sortField === 'size') cmp = a.size - b.size
+    return sortDir === 'asc' ? cmp : -cmp
+  })
+
+  const handleSortClick = (field: SortField) => {
+    if (sortField === field) {
+      setSortDir((d) => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortField(field)
+      setSortDir(field === 'date' ? 'desc' : 'asc')
+    }
+  }
+
+  const sortIcon = (field: SortField) => {
+    if (sortField !== field) return ''
+    return sortDir === 'asc' ? ' ▲' : ' ▼'
+  }
+
   const handleSelect = (file: AudioFile) => {
+    if (renamingKey) return
     onFileSelect(buildWorkerAudioUrl(file.key), file.key, file.name)
   }
 
+  // Rename handlers
+  const startRename = (e: React.MouseEvent, file: AudioFile) => {
+    e.stopPropagation()
+    setRenamingKey(file.key)
+    setRenameValue(file.name)
+  }
+
+  const commitRename = async () => {
+    if (!renamingKey || !renameValue.trim()) { setRenamingKey(null); return }
+    setRenaming(true)
+    try {
+      const res = await fetch(`${WORKER_URL}/files`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: renamingKey, newName: renameValue.trim() }),
+      })
+      if (!res.ok) throw new Error(`${res.status}`)
+      setRenamingKey(null)
+      load()
+    } catch (e) {
+      alert(`名前変更に失敗しました: ${e}`)
+    } finally {
+      setRenaming(false)
+    }
+  }
+
+  const handleRenameKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') commitRename()
+    if (e.key === 'Escape') setRenamingKey(null)
+  }
+
+  // Upload handlers
   const handleUploadSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -81,11 +148,6 @@ export function FileListPage({ org, onFileSelect, onLogout }: Props) {
     } finally {
       setUploading(false)
     }
-  }
-
-  const handleUpload = async () => {
-    if (!uploadFile) return
-    doUpload(uploadFile)
   }
 
   const resetUpload = () => {
@@ -124,7 +186,7 @@ export function FileListPage({ org, onFileSelect, onLogout }: Props) {
                 style={{ display: 'none' }}
               />
 
-              {!uploadFile && !uploadDone && (
+              {!uploadFile && !uploading && !uploadDone && (
                 <button className="primary-btn" onClick={() => uploadInputRef.current?.click()}>
                   ファイルを選択
                 </button>
@@ -137,7 +199,9 @@ export function FileListPage({ org, onFileSelect, onLogout }: Props) {
                     <div className="progress-wrap">
                       <div className="progress-bar" style={{ width: `${progress.percent}%` }} />
                       <span className="progress-text">
-                        {uploading ? `アップロード中... ${progress.percent}% (${fmt(progress.loaded)} / ${fmt(progress.total)})` : `${progress.percent}%`}
+                        {uploading
+                          ? `アップロード中... ${progress.percent}% (${fmt(progress.loaded)} / ${fmt(progress.total)})`
+                          : `${progress.percent}%`}
                       </span>
                     </div>
                   )}
@@ -155,13 +219,28 @@ export function FileListPage({ org, onFileSelect, onLogout }: Props) {
               {uploadDone && (
                 <div className="upload-success">
                   ✅ アップロード完了！
-                  <button className="secondary-btn" onClick={() => { resetUpload() }}>
+                  <button className="secondary-btn" onClick={resetUpload}>
                     続けてアップロード
                   </button>
                 </div>
               )}
             </div>
           )}
+        </div>
+
+        {/* ── ソートバー ── */}
+        <div className="file-sort-bar">
+          <span className="file-sort-label">並べ替え：</span>
+          {(['date', 'name', 'size'] as SortField[]).map((f) => (
+            <button
+              key={f}
+              className={`sort-btn${sortField === f ? ' active' : ''}`}
+              onClick={() => handleSortClick(f)}
+            >
+              {f === 'date' ? '日付' : f === 'name' ? '名前' : 'サイズ'}
+              {sortIcon(f)}
+            </button>
+          ))}
         </div>
 
         {/* ── ファイル一覧 ── */}
@@ -173,13 +252,33 @@ export function FileListPage({ org, onFileSelect, onLogout }: Props) {
         )}
 
         <div className="file-items">
-          {files.map((f) => (
-            <button key={f.key} className="file-item-btn" onClick={() => handleSelect(f)}>
-              <span className="file-item-name">🎵 {f.name}</span>
-              <span className="file-item-meta">
-                {fmt(f.size)} · {new Date(f.uploadedAt).toLocaleDateString('ja-JP')}
-              </span>
-            </button>
+          {sortedFiles.map((f) => (
+            <div key={f.key} className="file-item-row">
+              {renamingKey === f.key ? (
+                <div className="file-rename-row">
+                  <input
+                    className="file-rename-input"
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onKeyDown={handleRenameKeyDown}
+                    autoFocus
+                    disabled={renaming}
+                  />
+                  <button className="rename-ok-btn" onClick={commitRename} disabled={renaming}>✓</button>
+                  <button className="rename-cancel-btn" onClick={() => setRenamingKey(null)} disabled={renaming}>✕</button>
+                </div>
+              ) : (
+                <button className="file-item-btn" onClick={() => handleSelect(f)}>
+                  <span className="file-item-name">🎵 {f.name}</span>
+                  <span className="file-item-meta">
+                    {fmt(f.size)} · {new Date(f.uploadedAt).toLocaleDateString('ja-JP')}
+                  </span>
+                </button>
+              )}
+              {renamingKey !== f.key && (
+                <button className="file-rename-icon" onClick={(e) => startRename(e, f)} title="名前を変更">✏️</button>
+              )}
+            </div>
           ))}
         </div>
 

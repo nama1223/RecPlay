@@ -392,7 +392,7 @@
 .section-list-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 6px;
   padding: 7px 12px;
   border-bottom: 1px solid #2a1e52;
   position: sticky;
@@ -400,6 +400,48 @@
   background: #161630;
   z-index: 5;
 }
+
+.section-list-toolbar {
+  display: flex;
+  gap: 4px;
+  margin-right: auto;
+}
+
+.sort-filter-btn {
+  font-size: 11px;
+  padding: 3px 8px;
+  background: #1e1e42;
+  border: 1px solid #3a2a6a;
+  border-radius: 5px;
+  color: #9988cc;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.sort-filter-btn.active {
+  background: #3a2a7a;
+  border-color: #7755cc;
+  color: #ccaaff;
+}
+.sort-filter-btn:hover { background: #2a2060; }
+
+.section-drag-row {
+  display: flex;
+  align-items: stretch;
+}
+.section-drag-row.drag-over {
+  border-top: 2px solid #7755cc;
+}
+.drag-handle {
+  display: flex;
+  align-items: center;
+  padding: 0 6px;
+  color: #5544aa;
+  cursor: grab;
+  font-size: 16px;
+  user-select: none;
+  flex-shrink: 0;
+}
+.drag-handle:active { cursor: grabbing; }
 
 .section-list-title {
   font-size: 12px;
@@ -986,6 +1028,79 @@
   font-size: 14px;
   font-weight: 600;
 }
+
+/* ── File sort bar ── */
+.file-sort-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.file-sort-label { font-size: 12px; color: #9988cc; }
+.sort-btn {
+  font-size: 12px;
+  padding: 4px 10px;
+  background: #1e1e42;
+  border: 1px solid #3a2a6a;
+  border-radius: 6px;
+  color: #9988cc;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.sort-btn.active { background: #3a2a7a; border-color: #7755cc; color: #ccaaff; }
+.sort-btn:hover { background: #2a2060; }
+
+/* ── File item row with rename button ── */
+.file-item-row {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+.file-item-row .file-item-btn { flex: 1; }
+
+.file-rename-icon {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 8px 6px;
+  opacity: 0.4;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+}
+.file-item-row:hover .file-rename-icon { opacity: 1; }
+
+.file-rename-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex: 1;
+  padding: 8px 10px;
+  background: #1e1e42;
+  border: 1px solid #7755cc;
+  border-radius: 10px;
+}
+.file-rename-input {
+  flex: 1;
+  background: none;
+  border: none;
+  color: #eeeeff;
+  font-size: 14px;
+  outline: none;
+}
+.rename-ok-btn, .rename-cancel-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.rename-ok-btn { color: #7aff8a; }
+.rename-cancel-btn { color: #ff7a7a; }
+.rename-ok-btn:hover { background: #1a3a1a; }
+.rename-cancel-btn:hover { background: #3a1a1a; }
 
 .file-item-meta {
   font-size: 12px;

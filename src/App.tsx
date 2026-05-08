@@ -57,7 +57,7 @@ export default function App() {
     loadFile, loadUrl, setExcludedZones, setSkipExcluded,
   } = useAudioPlayer()
 
-  const { sections, addSection, updateSection, deleteSection, toggleExclude, importSections } = useSections()
+  const { sections, addSection, updateSection, deleteSection, toggleExclude, importSections, reorderSections } = useSections()
   const { zoomIndex, zoomIn, zoomOut, secondsPerRow, numRows, initZoom } = useSeekBar(duration)
   const { settings, updateSettings } = useSettings()
   const { samples: waveformSamples } = useWaveform(src, duration)
@@ -318,6 +318,7 @@ export default function App() {
                   onAddSection={handleAddSection}
                   onExportJson={handleExportJson}
                   onImportJson={handleImportJson}
+                  onReorder={reorderSections}
                 />
               )}
 

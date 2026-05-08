@@ -1,6 +1,6 @@
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, PUT, POST, DELETE, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, PUT, POST, DELETE, PATCH, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, Range',
 };
 
@@ -179,6 +179,30 @@ export default {
             uploadedAt: o.uploaded,
           }));
         return json({ files });
+      }
+
+      // PATCH /files — ファイル名変更（R2内でコピー→削除）
+      if (method === 'PATCH' && pathname === '/files') {
+        const { key, newName } = await request.json();
+        if (!key || !newName) return json({ error: 'key and newName required' }, 400);
+        const orgId = key.split('/')[0];
+        const filename = key.slice(orgId.length + 1);
+        const timestamp = filename.split('_')[0];
+        const safeName = newName.replace(/[/\\#%?&=+<>"'\x00-\x1f]/g, '_');
+        const newKey = `${orgId}/${timestamp}_${safeName}`;
+        if (newKey === key) return json({ ok: true, newKey });
+        const obj = await env.recplay_audio.get(key);
+        if (!obj) return json({ error: 'not found' }, 404);
+        await env.recplay_audio.put(newKey, obj.body, { httpMetadata: obj.httpMetadata });
+        await env.recplay_audio.delete(key);
+        const sectObj = await env.recplay_audio.get(`sections/${key}.json`);
+        if (sectObj) {
+          await env.recplay_audio.put(`sections/${newKey}.json`, sectObj.body, {
+            httpMetadata: { contentType: 'application/json' },
+          });
+          await env.recplay_audio.delete(`sections/${key}.json`);
+        }
+        return json({ ok: true, newKey });
       }
 
       // ── Admin ────────────────────────────────────────────────────

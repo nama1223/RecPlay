@@ -120,10 +120,21 @@ export function SeekBar({
     const time = getTimeFromPointer(e.clientX, e.clientY)
     const section = sections.find((s) => s.id === dragging.sectionId)
     if (!section) return
+    const MIN = 0.1
     if (dragging.isStart) {
-      onSectionUpdate(dragging.sectionId, { startTime: Math.min(time, section.endTime - 0.5) })
+      if (time >= section.endTime) {
+        setDragging({ sectionId: dragging.sectionId, isStart: false })
+        onSectionUpdate(dragging.sectionId, { startTime: section.endTime, endTime: Math.max(time, section.endTime + MIN) })
+      } else {
+        onSectionUpdate(dragging.sectionId, { startTime: time })
+      }
     } else {
-      onSectionUpdate(dragging.sectionId, { endTime: Math.max(time, section.startTime + 0.5) })
+      if (time <= section.startTime) {
+        setDragging({ sectionId: dragging.sectionId, isStart: true })
+        onSectionUpdate(dragging.sectionId, { startTime: Math.min(time, section.startTime - MIN), endTime: section.startTime })
+      } else {
+        onSectionUpdate(dragging.sectionId, { endTime: time })
+      }
     }
   }
 
