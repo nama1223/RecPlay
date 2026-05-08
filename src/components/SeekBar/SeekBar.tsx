@@ -17,6 +17,10 @@ interface Props {
   onZoomOut: () => void
 }
 
+const MIN_SEEKBAR_H = 60
+const MAX_SEEKBAR_H = 800
+const DEFAULT_SEEKBAR_H = 200
+
 interface DragState {
   sectionId: string
   isStart: boolean
@@ -40,6 +44,21 @@ export function SeekBar({
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [dragging, setDragging] = useState<DragState | null>(null)
   const pointerDownPos = useRef<{ x: number; y: number } | null>(null)
+
+  const [seekbarHeight, setSeekbarHeight] = useState(DEFAULT_SEEKBAR_H)
+  const resizeDrag = useRef<{ startY: number; startH: number } | null>(null)
+
+  const handleResizeStart = (e: React.PointerEvent) => {
+    e.preventDefault()
+    resizeDrag.current = { startY: e.clientY, startH: seekbarHeight }
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+  }
+  const handleResizeMove = (e: React.PointerEvent) => {
+    if (!resizeDrag.current) return
+    const dy = e.clientY - resizeDrag.current.startY
+    setSeekbarHeight(Math.max(MIN_SEEKBAR_H, Math.min(MAX_SEEKBAR_H, resizeDrag.current.startH + dy)))
+  }
+  const handleResizeEnd = () => { resizeDrag.current = null }
 
   // Draw waveform on canvas
   useEffect(() => {
@@ -160,7 +179,7 @@ export function SeekBar({
         <button className="zoom-btn" onClick={onZoomIn} disabled={zoomIndex === 0} title="ズームイン">＋</button>
       </div>
 
-      <div className="seekbar-scroll">
+      <div className="seekbar-scroll" style={{ height: seekbarHeight }}>
         <div
           ref={containerRef}
           className="seekbar-container"
@@ -194,6 +213,15 @@ export function SeekBar({
           ))}
         </div>
       </div>
+
+      <div
+        className="seekbar-resize-handle"
+        onPointerDown={handleResizeStart}
+        onPointerMove={handleResizeMove}
+        onPointerUp={handleResizeEnd}
+        onPointerCancel={handleResizeEnd}
+        title="ドラッグでサイズ変更"
+      />
     </div>
   )
 }
