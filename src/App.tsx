@@ -213,144 +213,127 @@ export default function App() {
     importSections([])
   }
 
-  // ── 画面振り分け ─────────────────────────────────────────────────────────
-  // <audio> は全画面で常にDOMに存在させる（useAudioPlayerのuseEffectが初回レンダーで
-  // audioRef.currentを取得できないとイベントリスナーが登録されないため）
+  // ── レンダー ──────────────────────────────────────────────────────────────
+  // <audio> はFragmentの先頭に固定し、画面遷移でも同じDOM要素を使い続ける。
+  // 親要素が変わるとReactが要素を作り直し、useEffectで登録したリスナーが失われるため。
+  return (
+    <>
+      <audio ref={audioRef} src={src ?? undefined} preload="metadata" />
 
-  const audioEl = <audio ref={audioRef} src={src ?? undefined} preload="metadata" />
-
-  if (screen === 'auth') {
-    return (
-      <>
-        {audioEl}
+      {screen === 'auth' && (
         <AuthPage
           onAuth={(o) => { setOrg(o); setScreen('files') }}
           onAdmin={() => setScreen('admin')}
         />
-      </>
-    )
-  }
+      )}
 
-  if (screen === 'admin') {
-    return (
-      <>
-        {audioEl}
-        <AdminPage onLogout={handleLogout} />
-      </>
-    )
-  }
+      {screen === 'admin' && <AdminPage onLogout={handleLogout} />}
 
-  if (screen === 'files' && org) {
-    return (
-      <>
-        {audioEl}
+      {screen === 'files' && org && (
         <FileListPage
           org={org}
           onFileSelect={handleFileSelect}
           onLogout={handleLogout}
         />
-      </>
-    )
-  }
-
-  // ── プレーヤー ────────────────────────────────────────────────────────────
-  return (
-    <div className="app">
-      {audioEl}
-
-      <header className="app-header">
-        <span className="app-title">🎵 {org ? org.name : 'RecPlay'}</span>
-        <ModeSelector mode={mode} onChange={setMode} />
-      </header>
-
-      {showFileLoader && (
-        <div className="modal-overlay">
-          <button className="modal-close" onClick={() => setShowFileLoader(false)}>✕ キャンセル</button>
-          <FileLoader onFileLoad={handleFileLoad} onUrlLoad={handleUrlLoad} orgId={org?.id} />
-        </div>
       )}
 
-      {fileLoaded && !showFileLoader && (
-        <div className="player">
-          <div className="file-bar">
-            <span className="file-name" title={fileName}>{fileName}</span>
-            <div style={{ display: 'flex', gap: 6 }}>
-              {org && (
-                <button className="change-btn" onClick={() => setScreen('files')}>← 一覧</button>
-              )}
-              <button className="change-btn" onClick={handleChangeFile}>変更</button>
+      {screen === 'player' && (
+        <div className="app">
+          <header className="app-header">
+            <span className="app-title">🎵 {org ? org.name : 'RecPlay'}</span>
+            <ModeSelector mode={mode} onChange={setMode} />
+          </header>
+
+          {showFileLoader && (
+            <div className="modal-overlay">
+              <button className="modal-close" onClick={() => setShowFileLoader(false)}>✕ キャンセル</button>
+              <FileLoader onFileLoad={handleFileLoad} onUrlLoad={handleUrlLoad} orgId={org?.id} />
             </div>
-          </div>
-
-          <div className="time-bar">
-            <span className="current-time">{formatTime(currentTime)}</span>
-            <span className="time-sep">/</span>
-            <span className="total-time">{formatTime(duration)}</span>
-            {fileKey && <span className="sync-indicator" title="区間データは自動同期されます">☁</span>}
-          </div>
-
-          <SeekBar
-            currentTime={currentTime}
-            duration={duration}
-            secondsPerRow={secondsPerRow}
-            numRows={numRows}
-            zoomIndex={zoomIndex}
-            sections={sections}
-            mode={mode}
-            waveformSamples={waveformSamples}
-            onSeek={seek}
-            onSectionUpdate={updateSection}
-            onZoomIn={zoomIn}
-            onZoomOut={zoomOut}
-          />
-
-          {mode !== 'settings' && (
-            <PlaybackControls
-              isPlaying={isPlaying}
-              mode={mode}
-              currentTime={currentTime}
-              sections={sections}
-              onToggle={togglePlayPause}
-              onSkip={skip}
-              onSeek={seek}
-              skipValues={settings.skipValues}
-              activeSectionId={activeSectionId}
-              onMarkStart={handleMarkStart}
-              onMarkEnd={handleMarkEnd}
-            />
           )}
 
-          {mode !== 'settings' && (
-            <SectionList
-              sections={sections}
-              mode={mode}
-              duration={duration}
-              audioSrc={src ?? ''}
-              editAdjustValues={settings.editAdjustValues}
-              currentTime={currentTime}
-              activeSectionId={activeSectionId}
-              onPlay={playSection}
-              onUpdate={updateSection}
-              onDelete={deleteSection}
-              onToggleExclude={toggleExclude}
-              onActivate={setActiveSectionId}
-              onAddSection={handleAddSection}
-              onExportJson={handleExportJson}
-              onImportJson={handleImportJson}
-            />
+          {fileLoaded && !showFileLoader && (
+            <div className="player">
+              <div className="file-bar">
+                <span className="file-name" title={fileName}>{fileName}</span>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {org && (
+                    <button className="change-btn" onClick={() => setScreen('files')}>← 一覧</button>
+                  )}
+                  <button className="change-btn" onClick={handleChangeFile}>変更</button>
+                </div>
+              </div>
+
+              <div className="time-bar">
+                <span className="current-time">{formatTime(currentTime)}</span>
+                <span className="time-sep">/</span>
+                <span className="total-time">{formatTime(duration)}</span>
+                {fileKey && <span className="sync-indicator" title="区間データは自動同期されます">☁</span>}
+              </div>
+
+              <SeekBar
+                currentTime={currentTime}
+                duration={duration}
+                secondsPerRow={secondsPerRow}
+                numRows={numRows}
+                zoomIndex={zoomIndex}
+                sections={sections}
+                mode={mode}
+                waveformSamples={waveformSamples}
+                onSeek={seek}
+                onSectionUpdate={updateSection}
+                onZoomIn={zoomIn}
+                onZoomOut={zoomOut}
+              />
+
+              {mode !== 'settings' && (
+                <PlaybackControls
+                  isPlaying={isPlaying}
+                  mode={mode}
+                  currentTime={currentTime}
+                  sections={sections}
+                  onToggle={togglePlayPause}
+                  onSkip={skip}
+                  onSeek={seek}
+                  skipValues={settings.skipValues}
+                  activeSectionId={activeSectionId}
+                  onMarkStart={handleMarkStart}
+                  onMarkEnd={handleMarkEnd}
+                />
+              )}
+
+              {mode !== 'settings' && (
+                <SectionList
+                  sections={sections}
+                  mode={mode}
+                  duration={duration}
+                  audioSrc={src ?? ''}
+                  editAdjustValues={settings.editAdjustValues}
+                  currentTime={currentTime}
+                  activeSectionId={activeSectionId}
+                  onPlay={playSection}
+                  onUpdate={updateSection}
+                  onDelete={deleteSection}
+                  onToggleExclude={toggleExclude}
+                  onActivate={setActiveSectionId}
+                  onAddSection={handleAddSection}
+                  onExportJson={handleExportJson}
+                  onImportJson={handleImportJson}
+                />
+              )}
+
+              {mode === 'settings' && (
+                <SettingsPanel settings={settings} onUpdate={updateSettings} />
+              )}
+            </div>
           )}
 
-          {mode === 'settings' && (
-            <SettingsPanel settings={settings} onUpdate={updateSettings} />
+          {!fileLoaded && !showFileLoader && (
+            <div className="app-body">
+              <FileLoader onFileLoad={handleFileLoad} onUrlLoad={handleUrlLoad} orgId={org?.id} />
+            </div>
           )}
         </div>
       )}
-
-      {!fileLoaded && !showFileLoader && (
-        <div className="app-body">
-          <FileLoader onFileLoad={handleFileLoad} onUrlLoad={handleUrlLoad} orgId={org?.id} />
-        </div>
-      )}
-    </div>
+    </>
   )
 }
