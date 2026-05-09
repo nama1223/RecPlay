@@ -131,7 +131,7 @@ export function SectionItem({
                 onClose={() => setExpanded(false)}
               />
               <button
-                className="action-btn delete"
+                className="action-btn delete compact"
                 onClick={() => { if (confirm(`「${section.label}」を削除しますか？`)) onDelete(section.id) }}
               >
                 🗑 削除

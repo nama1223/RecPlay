@@ -1,8 +1,8 @@
 import { Section, AppMode } from '../../types'
 import { formatTime } from '../../utils/timeFormat'
 
-export const LABEL_WIDTH = 64
-export const ROW_HEIGHT = 52
+export const LABEL_WIDTH = 42
+export const ROW_HEIGHT = 36
 
 interface Props {
   rowIndex: number

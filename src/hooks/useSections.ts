@@ -74,12 +74,13 @@ export function useSections() {
   }, [])
 
   // ── Mutations ────────────────────────────────────────────────────────────
-  const addSection = useCallback((startTime: number, endTime: number) => {
+  const addSection = useCallback((startTime: number, endTime: number): string => {
     pushHistory()
     const num = nextNumRef.current++
+    const id = crypto.randomUUID()
     setSync((prev) => {
       const newSection: Section = {
-        id: crypto.randomUUID(),
+        id,
         label: `区間 ${num}`,
         startTime,
         endTime,
@@ -88,6 +89,7 @@ export function useSections() {
       }
       return [...prev, newSection]
     })
+    return id
   }, [pushHistory, setSync])
 
   // updateSection uses debounced history (seekbar drag fires many times per second)

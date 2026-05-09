@@ -16,7 +16,7 @@ import { AuthPage } from './components/AuthPage'
 import { FileListPage } from './components/FileListPage'
 import { AdminPage } from './components/AdminPage'
 import { formatTime } from './utils/timeFormat'
-import { AppMode, Section } from './types'
+import { AppMode, Section, ZOOM_LEVELS } from './types'
 import { R2_PUBLIC_URL, WORKER_URL, buildWorkerAudioUrl } from './config'
 import './App.css'
 
@@ -159,7 +159,8 @@ export default function App() {
   const handleAddSection = () => {
     const start = currentTime
     const end = Math.min(currentTime + 30, duration || currentTime + 30)
-    addSection(start, end)
+    const id = addSection(start, end)
+    setActiveSectionId(id)
   }
 
   const handleMarkStart = () => {
@@ -237,27 +238,34 @@ export default function App() {
                         const url = `${location.origin}${location.pathname}?url=${encodeURIComponent(buildWorkerAudioUrl(fileKey))}`
                         navigator.clipboard.writeText(url).then(() => alert('URLをコピーしました'))
                       }}
-                    >🔗</button>
+                    >共有</button>
                   )}
                   {org && (
-                    <button className="change-btn" onClick={() => setScreen('files')}>← 一覧</button>
+                    <button className="change-btn" onClick={() => setScreen('files')}>ファイル一覧</button>
                   )}
-                  <button className="change-btn" onClick={handleChangeFile}>変更</button>
                 </div>
               </div>
 
-              <div className="time-bar">
-                <span className="current-time">{formatTime(currentTime)}</span>
-                <span className="time-sep">/</span>
-                <span className="total-time">{formatTime(duration)}</span>
-                {fileKey && (
-                  <span
-                    className={`sync-indicator${isDirty ? ' sync-dirty' : ' sync-clean'}`}
-                    title={lastSyncedAt ? `最終同期: ${lastSyncedAt.toLocaleTimeString('ja-JP')}` : '未同期'}
-                  >
-                    ☁ {lastSyncedAt ? lastSyncedAt.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '---'}
-                  </span>
-                )}
+              {/* time + zoom on same row */}
+              <div className="time-zoom-bar">
+                <div className="time-display">
+                  <span className="current-time">{formatTime(currentTime)}</span>
+                  <span className="time-sep">/</span>
+                  <span className="total-time">{formatTime(duration)}</span>
+                  {fileKey && (
+                    <span
+                      className={`sync-indicator${isDirty ? ' sync-dirty' : ' sync-clean'}`}
+                      title={lastSyncedAt ? `最終同期: ${lastSyncedAt.toLocaleTimeString('ja-JP')}` : '未同期'}
+                    >
+                      ☁ {lastSyncedAt ? lastSyncedAt.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                    </span>
+                  )}
+                </div>
+                <div className="zoom-controls-inline">
+                  <button className="zoom-btn-sm" onClick={zoomOut} disabled={zoomIndex === ZOOM_LEVELS.length - 1} title="ズームアウト">−</button>
+                  <span className="zoom-label-sm">{secondsPerRow >= 60 ? `${secondsPerRow / 60}分/段` : `${secondsPerRow}秒/段`}</span>
+                  <button className="zoom-btn-sm" onClick={zoomIn} disabled={zoomIndex === 0} title="ズームイン">＋</button>
+                </div>
               </div>
 
               <SeekBar
@@ -265,14 +273,11 @@ export default function App() {
                 duration={duration}
                 secondsPerRow={secondsPerRow}
                 numRows={numRows}
-                zoomIndex={zoomIndex}
                 sections={sections}
                 mode={mode}
                 waveformSamples={waveformSamples}
                 onSeek={seek}
                 onSectionUpdate={updateSection}
-                onZoomIn={zoomIn}
-                onZoomOut={zoomOut}
               />
 
               {mode !== 'settings' && (

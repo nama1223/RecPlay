@@ -41,7 +41,8 @@ export function FlagEditor({ section, duration, editAdjustValues, onUpdate, onCl
   return (
     <div className="flag-editor">
       <div className="flag-editor-header">
-        <span style={{ color: section.color }}>●</span> {section.label}
+        <span style={{ color: section.color }}>●</span>
+        <span style={{ flex: 1 }} />
         <button className="close-btn" onClick={onClose}>✕</button>
       </div>
 

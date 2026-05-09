@@ -1,5 +1,5 @@
 import { useRef, useState, useCallback, useEffect } from 'react'
-import { Section, AppMode, ZOOM_LEVELS } from '../../types'
+import { Section, AppMode } from '../../types'
 import { SeekBarRow, LABEL_WIDTH, ROW_HEIGHT } from './SeekBarRow'
 
 interface Props {
@@ -7,14 +7,11 @@ interface Props {
   duration: number
   secondsPerRow: number
   numRows: number
-  zoomIndex: number
   sections: Section[]
   mode: AppMode
   waveformSamples: Float32Array | null
   onSeek: (time: number) => void
   onSectionUpdate: (id: string, updates: Partial<Section>) => void
-  onZoomIn: () => void
-  onZoomOut: () => void
 }
 
 const MIN_SEEKBAR_H = 60
@@ -32,14 +29,11 @@ export function SeekBar({
   duration,
   secondsPerRow,
   numRows,
-  zoomIndex,
   sections,
   mode,
   waveformSamples,
   onSeek,
   onSectionUpdate,
-  onZoomIn,
-  onZoomOut,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -171,17 +165,8 @@ export function SeekBar({
     [],
   )
 
-  const zoomLabel = (spr: number) => (spr >= 60 ? `${spr / 60}分/段` : `${spr}秒/段`)
-
   return (
     <div className="seekbar-wrapper">
-      <div className="zoom-controls">
-        {/* − on left, ＋ on right */}
-        <button className="zoom-btn" onClick={onZoomOut} disabled={zoomIndex === ZOOM_LEVELS.length - 1} title="ズームアウト">−</button>
-        <span className="zoom-label">{zoomLabel(secondsPerRow)}</span>
-        <button className="zoom-btn" onClick={onZoomIn} disabled={zoomIndex === 0} title="ズームイン">＋</button>
-      </div>
-
       <div className="seekbar-scroll" style={{ height: seekbarHeight }}>
         <div
           ref={containerRef}
@@ -217,14 +202,26 @@ export function SeekBar({
         </div>
       </div>
 
-      <div
-        className="seekbar-resize-handle"
-        onPointerDown={handleResizeStart}
-        onPointerMove={handleResizeMove}
-        onPointerUp={handleResizeEnd}
-        onPointerCancel={handleResizeEnd}
-        title="ドラッグでサイズ変更"
-      />
+      <div className="seekbar-resize-handle">
+        <button
+          className="resize-extreme-btn"
+          onClick={() => setSeekbarHeight(MIN_SEEKBAR_H)}
+          title="シークバーを縮小"
+        >▲</button>
+        <div
+          className="resize-drag-zone"
+          onPointerDown={handleResizeStart}
+          onPointerMove={handleResizeMove}
+          onPointerUp={handleResizeEnd}
+          onPointerCancel={handleResizeEnd}
+          title="ドラッグでサイズ変更"
+        />
+        <button
+          className="resize-extreme-btn"
+          onClick={() => setSeekbarHeight(MAX_SEEKBAR_H())}
+          title="シークバーを拡大"
+        >▼</button>
+      </div>
     </div>
   )
 }
