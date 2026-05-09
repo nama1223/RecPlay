@@ -18,21 +18,40 @@ export interface SyncStatus {
 
 /**
  * Syncs sections with R2 via Worker.
- * - edit mode: debounced save (1.5s), force save every FORCE_SYNC_EDITS changes
- * - play mode: polls R2 every 10s
- * Returns SyncStatus for display.
+ *
+ * Safety guarantees:
+ *  - Saves are blocked during the initial remote load to prevent overwriting
+ *    R2 with an empty sections array (which was a data-loss bug when the user
+ *    re-opened the same file from the file list).
+ *  - A fileLoadCounter (incremented by the caller on every file selection,
+ *    even the same file) forces a re-fetch so sections are always restored.
+ *  - Comparison uses sections-only JSON so a just-loaded set is never written
+ *    back unnecessarily.
+ *
+ * Modes:
+ *  - edit: debounced save (1.5 s), force every FORCE_SYNC_EDITS changes
+ *  - play: polls R2 every 10 s for remote updates
  */
 export function useSectionSync(
   fileKey: string | null,
+  fileLoadCounter: number,
   mode: 'play' | 'edit' | 'settings',
   sections: Section[],
   onRemoteUpdate: (sections: Section[]) => void,
 ): SyncStatus {
-  const lastSavedRef = useRef<string>('')
+  // Stores sections-only JSON (no timestamp) to detect real changes
+  const lastSavedJsonRef = useRef<string>('')
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const mountedRef = useRef(true)
   const editCountRef = useRef(0)
+
+  /**
+   * True while the initial remote fetch is in-flight.
+   * Any save attempted during this window is silently dropped to prevent
+   * an importSections([]) call from overwriting real R2 data with an empty array.
+   */
+  const isRemoteLoadingRef = useRef(false)
 
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null)
   const [isDirty, setIsDirty] = useState(false)
@@ -53,15 +72,24 @@ export function useSectionSync(
   const saveRemote = useCallback(
     async (secs: Section[]) => {
       if (!fileKey) return
+
+      // Safety guard: never save while the remote load is still in-flight
+      if (isRemoteLoadingRef.current) return
+
+      // Bail out if sections are identical to what was last saved/loaded
+      const sectionsJson = JSON.stringify(secs)
+      if (sectionsJson === lastSavedJsonRef.current) {
+        setIsDirty(false)
+        return
+      }
+      lastSavedJsonRef.current = sectionsJson
+
       const payload: SyncPayload = { sections: secs, updatedAt: new Date().toISOString() }
-      const body = JSON.stringify(payload)
-      if (body === lastSavedRef.current) { setIsDirty(false); return }
-      lastSavedRef.current = body
       try {
         await fetch(`${WORKER_URL}/sections?file=${encodeURIComponent(fileKey)}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body,
+          body: JSON.stringify(payload),
         })
         if (mountedRef.current) {
           setLastSyncedAt(new Date())
@@ -74,23 +102,40 @@ export function useSectionSync(
     [fileKey],
   )
 
-  // ── On mount: load initial sections from R2 ──────────────────────────────
+  // ── Load sections from R2 whenever file changes (or is re-selected) ─────
   useEffect(() => {
     if (!fileKey) return
+
+    // Block saves until the load completes
+    isRemoteLoadingRef.current = true
+    lastSavedJsonRef.current = ''
+    editCountRef.current = 0
+    setIsDirty(false)
+
     fetchRemote().then((data) => {
       if (!mountedRef.current) return
       if (data?.sections?.length) {
-        lastSavedRef.current = JSON.stringify(data)
+        // Record what we loaded so the edit-save bail-out works correctly
+        lastSavedJsonRef.current = JSON.stringify(data.sections)
         setLastSyncedAt(new Date())
         onRemoteUpdate(data.sections)
       }
+      // Release the guard AFTER updating lastSavedJsonRef so the first
+      // edit-save effect triggered by onRemoteUpdate bails out cleanly.
+      isRemoteLoadingRef.current = false
+    }).catch(() => {
+      if (mountedRef.current) isRemoteLoadingRef.current = false
     })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fileKey])
+  // fileLoadCounter ensures re-fetch even when the same fileKey is re-selected
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fileKey, fileLoadCounter])
 
   // ── Edit mode: debounced save + force every N edits ──────────────────────
   useEffect(() => {
     if (mode !== 'edit' || !fileKey) return
+
+    // Do NOT save while the remote load is in-flight (prevents empty-section overwrite)
+    if (isRemoteLoadingRef.current) return
 
     setIsDirty(true)
     editCountRef.current += 1
@@ -110,15 +155,15 @@ export function useSectionSync(
     }
   }, [sections, mode, fileKey, saveRemote])
 
-  // ── Play mode: poll every 10s ────────────────────────────────────────────
+  // ── Play mode: poll every 10 s ────────────────────────────────────────────
   useEffect(() => {
     if (mode !== 'play' || !fileKey) return
     pollTimerRef.current = setInterval(async () => {
       const data = await fetchRemote()
       if (!mountedRef.current || !data?.sections?.length) return
-      const body = JSON.stringify(data)
-      if (body !== lastSavedRef.current) {
-        lastSavedRef.current = body
+      const sectionsJson = JSON.stringify(data.sections)
+      if (sectionsJson !== lastSavedJsonRef.current) {
+        lastSavedJsonRef.current = sectionsJson
         onRemoteUpdate(data.sections)
       }
     }, POLL_INTERVAL)

@@ -51,6 +51,8 @@ export default function App() {
   const [fileKey, setFileKey] = useState<string | null>(null)
   const [showFileLoader, setShowFileLoader] = useState(false)
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null)
+  // Incremented on every file selection (even same file) to force useSectionSync re-fetch
+  const [fileLoadCounter, setFileLoadCounter] = useState(0)
 
   const {
     audioRef, currentTime, duration, isPlaying, src,
@@ -65,7 +67,7 @@ export default function App() {
   const [waveformGenerating, setWaveformGenerating] = useState(false)
   const [waveformGenPct, setWaveformGenPct] = useState(0)
   const onRemoteUpdate = useCallback((secs: Section[]) => importSections(secs), [importSections])
-  const { lastSyncedAt, isDirty } = useSectionSync(fileKey, mode, sections, onRemoteUpdate)
+  const { lastSyncedAt, isDirty } = useSectionSync(fileKey, fileLoadCounter, mode, sections, onRemoteUpdate)
 
   // ── ?url= パラメータ → 自動ログイン & 直接プレーヤー ──────────────────
   useEffect(() => {
@@ -149,7 +151,8 @@ export default function App() {
     setFileKey(key)
     setFileLoaded(true)
     setScreen('player')
-    importSections([])
+    setFileLoadCounter((c) => c + 1) // force useSectionSync re-fetch (even for same file)
+    importSections([])               // clear UI immediately; sync is blocked until remote loads
   }
 
   const handleChangeFile = () => {
