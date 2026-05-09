@@ -94,9 +94,9 @@ export function SeekBar({
 
       for (let b = startBin; b < endBin; b++) {
         const amp = waveformSamples[b] ?? 0
-        const barH = amp * (ROW_HEIGHT * 0.75)
+        const barH = amp * (ROW_HEIGHT * 0.88)
         const x = LABEL_WIDTH + (b - startBin) * binPx
-        ctx.fillStyle = `rgba(120,180,255,0.25)`
+        ctx.fillStyle = `rgba(255,255,255,0.52)`
         ctx.fillRect(x, rowY + ROW_HEIGHT / 2 - barH / 2, Math.max(1, binPx - 0.5), barH)
       }
     }
@@ -176,16 +176,6 @@ export function SeekBar({
           onPointerUp={handleContainerPointerUp}
           style={{ touchAction: dragging ? 'none' : 'pan-y', position: 'relative' }}
         >
-          {/* Waveform canvas overlay */}
-          <canvas
-            ref={canvasRef}
-            style={{
-              position: 'absolute', top: 0, left: 0,
-              width: '100%', height: numRows * ROW_HEIGHT,
-              pointerEvents: 'none', zIndex: 1,
-            }}
-          />
-
           {Array.from({ length: numRows }, (_, i) => (
             <SeekBarRow
               key={i}
@@ -199,6 +189,16 @@ export function SeekBar({
               onFlagPointerDown={handleFlagPointerDown}
             />
           ))}
+
+          {/* Waveform canvas — placed last so it paints above rows */}
+          <canvas
+            ref={canvasRef}
+            style={{
+              position: 'absolute', top: 0, left: 0,
+              width: '100%', height: numRows * ROW_HEIGHT,
+              pointerEvents: 'none',
+            }}
+          />
         </div>
       </div>
 
