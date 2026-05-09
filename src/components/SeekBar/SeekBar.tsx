@@ -80,6 +80,10 @@ export function SeekBar({
 
     const totalBins = waveformSamples.length
 
+    // binPx is fixed across all rows so the last (shorter) row doesn't stretch to fill full width
+    const binsPerRow = (secondsPerRow / duration) * totalBins
+    const binPx = trackWidth / binsPerRow
+
     for (let row = 0; row < numRows; row++) {
       const rowStartTime = row * secondsPerRow
       const rowEndTime = Math.min((row + 1) * secondsPerRow, duration)
@@ -87,10 +91,7 @@ export function SeekBar({
 
       const startBin = Math.floor((rowStartTime / duration) * totalBins)
       const endBin = Math.ceil((rowEndTime / duration) * totalBins)
-      const numBins = endBin - startBin
-      if (numBins <= 0) continue
-
-      const binPx = trackWidth / numBins
+      if (endBin <= startBin) continue
 
       for (let b = startBin; b < endBin; b++) {
         const amp = waveformSamples[b] ?? 0
