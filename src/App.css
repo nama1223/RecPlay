@@ -852,10 +852,14 @@
 
 /* ── Sync indicator ── */
 .sync-indicator {
-  font-size: 12px;
-  color: #6d6daa;
-  margin-left: 6px;
+  font-size: 11px;
+  margin-left: 8px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+  transition: color 0.4s;
 }
+.sync-indicator.sync-clean { color: #a78bfa; }
+.sync-indicator.sync-dirty { color: #3a2e72; }
 
 /* ── Auth page ── */
 .auth-page {

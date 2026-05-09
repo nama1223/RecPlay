@@ -62,7 +62,7 @@ export default function App() {
   const { settings, updateSettings } = useSettings()
   const { samples: waveformSamples } = useWaveform(src, duration)
   const onRemoteUpdate = useCallback((secs: Section[]) => importSections(secs), [importSections])
-  useSectionSync(fileKey, mode, sections, onRemoteUpdate)
+  const { lastSyncedAt, isDirty } = useSectionSync(fileKey, mode, sections, onRemoteUpdate)
 
   // ── ?url= パラメータ → 自動ログイン & 直接プレーヤー ──────────────────
   useEffect(() => {
@@ -256,6 +256,16 @@ export default function App() {
               <div className="file-bar">
                 <span className="file-name" title={fileName}>{fileName}</span>
                 <div style={{ display: 'flex', gap: 6 }}>
+                  {fileKey && (
+                    <button
+                      className="change-btn"
+                      title="このファイルのURLをコピー"
+                      onClick={() => {
+                        const url = `${location.origin}${location.pathname}?url=${encodeURIComponent(buildWorkerAudioUrl(fileKey))}`
+                        navigator.clipboard.writeText(url).then(() => alert('URLをコピーしました'))
+                      }}
+                    >🔗</button>
+                  )}
                   {org && (
                     <button className="change-btn" onClick={() => setScreen('files')}>← 一覧</button>
                   )}
@@ -267,7 +277,14 @@ export default function App() {
                 <span className="current-time">{formatTime(currentTime)}</span>
                 <span className="time-sep">/</span>
                 <span className="total-time">{formatTime(duration)}</span>
-                {fileKey && <span className="sync-indicator" title="区間データは自動同期されます">☁</span>}
+                {fileKey && (
+                  <span
+                    className={`sync-indicator${isDirty ? ' sync-dirty' : ' sync-clean'}`}
+                    title={lastSyncedAt ? `最終同期: ${lastSyncedAt.toLocaleTimeString('ja-JP')}` : '未同期'}
+                  >
+                    ☁ {lastSyncedAt ? lastSyncedAt.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '---'}
+                  </span>
+                )}
               </div>
 
               <SeekBar

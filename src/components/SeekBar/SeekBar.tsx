@@ -17,9 +17,9 @@ interface Props {
   onZoomOut: () => void
 }
 
-const MIN_SEEKBAR_H = 60
-const MAX_SEEKBAR_H = 800
-const DEFAULT_SEEKBAR_H = 200
+const MIN_SEEKBAR_H = 80
+const MAX_SEEKBAR_H = 1400
+const DEFAULT_SEEKBAR_H = 320
 
 interface DragState {
   sectionId: string
