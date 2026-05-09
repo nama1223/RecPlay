@@ -57,7 +57,7 @@ export default function App() {
     loadFile, loadUrl, setExcludedZones, setSkipExcluded,
   } = useAudioPlayer()
 
-  const { sections, addSection, updateSection, deleteSection, toggleExclude, importSections, reorderSections } = useSections()
+  const { sections, addSection, updateSection, deleteSection, toggleExclude, importSections, reorderSections, undo, redo, undoCount, redoCount } = useSections()
   const { zoomIndex, zoomIn, zoomOut, secondsPerRow, numRows, initZoom } = useSeekBar(duration)
   const { settings, updateSettings } = useSettings()
   const { samples: waveformSamples } = useWaveform(src, duration)
@@ -174,33 +174,6 @@ export default function App() {
     const sec = sections.find((s) => s.id === activeSectionId)
     if (!sec) return
     updateSection(activeSectionId, { endTime: Math.max(currentTime, sec.startTime + 0.1) })
-  }
-
-  const handleExportJson = () => {
-    const data = { version: 1, filename: fileName, duration, sections }
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${fileName.replace(/\.[^.]+$/, '')}_sections.json`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
-  const handleImportJson = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      try {
-        const data = JSON.parse(ev.target?.result as string)
-        if (Array.isArray(data.sections)) importSections(data.sections as Section[])
-      } catch {
-        alert('JSONの読み込みに失敗しました')
-      }
-    }
-    reader.readAsText(file)
-    e.target.value = ''
   }
 
   const handleLogout = () => {
@@ -333,8 +306,10 @@ export default function App() {
                   onToggleExclude={toggleExclude}
                   onActivate={setActiveSectionId}
                   onAddSection={handleAddSection}
-                  onExportJson={handleExportJson}
-                  onImportJson={handleImportJson}
+                  onUndo={undo}
+                  onRedo={redo}
+                  undoCount={undoCount}
+                  redoCount={redoCount}
                   onReorder={reorderSections}
                 />
               )}

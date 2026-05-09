@@ -20,8 +20,10 @@ interface Props {
   onToggleExclude: (id: string) => void
   onActivate: (id: string) => void
   onAddSection: () => void
-  onExportJson: () => void
-  onImportJson: (e: React.ChangeEvent<HTMLInputElement>) => void
+  onUndo: () => void
+  onRedo: () => void
+  undoCount: number
+  redoCount: number
   onReorder: (newOrder: Section[]) => void
 }
 
@@ -43,8 +45,10 @@ export function SectionList({
   onToggleExclude,
   onActivate,
   onAddSection,
-  onExportJson,
-  onImportJson,
+  onUndo,
+  onRedo,
+  undoCount,
+  redoCount,
   onReorder,
 }: Props) {
   const [dlAll, setDlAll] = useState(false)
@@ -132,11 +136,26 @@ export function SectionList({
           {mode === 'edit' && (
             <button className="icon-btn" onClick={onAddSection} title="現在位置に区間を追加">＋</button>
           )}
-          <button className="icon-btn" onClick={onExportJson} title="区間データをJSONで保存">💾</button>
-          <label className="icon-btn" title="区間データをJSONから読み込み">
-            📂
-            <input type="file" accept=".json" onChange={onImportJson} style={{ display: 'none' }} />
-          </label>
+          {/* Undo */}
+          <button
+            className="icon-btn badge-btn"
+            onClick={onUndo}
+            disabled={undoCount === 0}
+            title={`元に戻す (${undoCount})`}
+          >
+            ↩
+            {undoCount > 0 && <span className="icon-badge">{undoCount > 99 ? '99+' : undoCount}</span>}
+          </button>
+          {/* Redo */}
+          <button
+            className="icon-btn badge-btn"
+            onClick={onRedo}
+            disabled={redoCount === 0}
+            title={`やり直す (${redoCount})`}
+          >
+            ↪
+            {redoCount > 0 && <span className="icon-badge">{redoCount > 99 ? '99+' : redoCount}</span>}
+          </button>
         </div>
       </div>
 

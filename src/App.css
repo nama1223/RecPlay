@@ -137,7 +137,7 @@
 .seekbar-wrapper {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  flex-shrink: 0;   /* ← critical: don't let flexbox compress the seekbar */
   border-top: 1px solid #2a1e52;
   border-bottom: 1px solid #2a1e52;
 }
@@ -183,29 +183,30 @@
 }
 
 .seekbar-resize-handle {
-  height: 10px;
+  height: 22px;      /* larger touch target */
   cursor: ns-resize;
-  background: #1a1a38;
-  border-top: 1px solid #2a1e52;
+  background: #131328;
+  border-top: 2px solid #3a2a6a;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   user-select: none;
   touch-action: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .seekbar-resize-handle::after {
-  content: '';
-  display: block;
-  width: 40px;
-  height: 3px;
-  border-radius: 2px;
-  background: #3a2a6a;
+  content: '⋯';
+  font-size: 18px;
+  color: #3a2a6a;
+  letter-spacing: 4px;
+  line-height: 1;
 }
 
-.seekbar-resize-handle:hover::after {
-  background: #7c3aed;
+.seekbar-resize-handle:hover::after,
+.seekbar-resize-handle:active::after {
+  color: #9b72f5;
 }
 
 .seekbar-container {
@@ -406,8 +407,8 @@
 
 /* ── Section List ── */
 .section-list {
-  flex-shrink: 0;
-  max-height: 38vh;
+  flex: 1;          /* ← take remaining space after seekbar */
+  min-height: 80px; /* always show at least a bit */
   overflow-y: auto;
   background: #161630;
   -webkit-overflow-scrolling: touch;
@@ -487,6 +488,30 @@
   align-items: center;
 }
 .icon-btn:active { background: #3a2e72; }
+.icon-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* Undo/Redo badge */
+.badge-btn {
+  position: relative;
+}
+.icon-badge {
+  position: absolute;
+  top: 0px;
+  right: 0px;
+  min-width: 15px;
+  height: 15px;
+  background: #7c3aed;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3px;
+  pointer-events: none;
+  transform: translate(40%, -40%);
+}
 
 .no-sections {
   padding: 14px;

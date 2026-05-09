@@ -17,9 +17,10 @@ interface Props {
   onZoomOut: () => void
 }
 
-const MIN_SEEKBAR_H = 80
-const MAX_SEEKBAR_H = 1400
-const DEFAULT_SEEKBAR_H = 320
+const MIN_SEEKBAR_H = 60
+// Dynamic limits based on screen size (computed once at load)
+const MAX_SEEKBAR_H = () => Math.round(window.innerHeight * 0.72)
+const DEFAULT_SEEKBAR_H = () => Math.round(Math.min(320, window.innerHeight * 0.38))
 
 interface DragState {
   sectionId: string
@@ -50,13 +51,15 @@ export function SeekBar({
 
   const handleResizeStart = (e: React.PointerEvent) => {
     e.preventDefault()
+    e.stopPropagation()
     resizeDrag.current = { startY: e.clientY, startH: seekbarHeight }
     ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
   }
   const handleResizeMove = (e: React.PointerEvent) => {
     if (!resizeDrag.current) return
+    e.preventDefault()
     const dy = e.clientY - resizeDrag.current.startY
-    setSeekbarHeight(Math.max(MIN_SEEKBAR_H, Math.min(MAX_SEEKBAR_H, resizeDrag.current.startH + dy)))
+    setSeekbarHeight(Math.max(MIN_SEEKBAR_H, Math.min(MAX_SEEKBAR_H(), resizeDrag.current.startH + dy)))
   }
   const handleResizeEnd = () => { resizeDrag.current = null }
 
