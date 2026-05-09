@@ -51,17 +51,19 @@ export function useWaveform(
 
       if (cancelled) return
 
-      // 2. Real-time decode for local blob URLs (no memory spike: uses MediaElement)
+      // 2. Local blob URLs: chunked decode works for blob: too (supports HEAD + Range)
       if (!src.startsWith('blob:')) {
         setLoading(false)
         return
       }
 
       try {
-        const result = await computeWaveform(src, duration)
+        const result = await computeWaveform(src, duration, (_pct, partial) => {
+          if (!cancelled) setSamples(partial)
+        })
         if (!cancelled) setSamples(result)
       } catch {
-        // Silently fail — waveform is optional
+        // Silently fail — waveform is optional for local files
       } finally {
         if (!cancelled) setLoading(false)
       }

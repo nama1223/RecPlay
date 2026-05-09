@@ -6,7 +6,7 @@ import { useSettings } from './hooks/useSettings'
 import { useWaveform } from './hooks/useWaveform'
 import { useSectionSync } from './hooks/useSectionSync'
 import { OrgInfo, getStoredOrgs, storeOrg } from './hooks/useOrgAuth'
-import { computeWaveform, serializeWaveform } from './utils/waveformCompute'
+import { computeWaveform, serializeWaveform, getWaveformResumeInfo, clearWaveformResume } from './utils/waveformCompute'
 import { SeekBar } from './components/SeekBar/SeekBar'
 import { PlaybackControls } from './components/Controls/PlaybackControls'
 import { SectionList } from './components/Sections/SectionList'
@@ -185,17 +185,43 @@ export default function App() {
 
   const handleGenerateWaveform = async () => {
     if (!src || !fileKey || duration <= 0) return
-    const estMinutes = Math.ceil(duration / 16 / 60)
-    const msg = waveformStored
-      ? `波形データはすでに生成済みです。再生成しますか？\n（約${estMinutes}分かかります）`
-      : `波形を生成します。ファイルの長さによっては数分かかります（目安: 約${estMinutes}分）。\nPCからの実行を推奨します。続けますか？`
-    if (!confirm(msg)) return
+
+    const resumeKey = `wf-${fileKey}`
+    const numChunks = Math.ceil(duration / 300) // 5-min chunks
+    const resumeInfo = getWaveformResumeInfo(resumeKey)
+
+    // Confirm / offer resume
+    if (resumeInfo) {
+      const choice = confirm(
+        `前回の波形生成が ${resumeInfo.pct}% で中断されています。\n` +
+        `「OK」で続きから再開、「キャンセル」で最初からやり直します。`
+      )
+      if (!choice) clearWaveformResume(resumeKey)
+    } else if (waveformStored) {
+      if (!confirm('波形データはすでに生成済みです。再生成しますか？')) return
+      clearWaveformResume(resumeKey)
+    } else {
+      const estMin = Math.ceil(numChunks * 8 / 60) // ~8s per chunk on average
+      if (!confirm(
+        `波形を生成します（${numChunks}チャンク、目安 ${estMin} 分）。\n` +
+        `途中で中断しても次回「🎵」を押すと再開できます。\n\n続けますか？`
+      )) return
+    }
+
     setWaveformGenerating(true)
-    setWaveformGenPct(0)
+    setWaveformGenPct(resumeInfo?.pct ?? 0)
     try {
-      const samples = await computeWaveform(src, duration, (pct) => setWaveformGenPct(pct))
+      const samples = await computeWaveform(
+        src,
+        duration,
+        (pct, displayBins) => {
+          setWaveformGenPct(pct)
+          setWaveformSamples(displayBins) // live waveform display per chunk
+        },
+        resumeKey,
+      )
       setWaveformSamples(samples)
-      // Save to Worker
+      // Save completed waveform to Worker
       const body = JSON.stringify(serializeWaveform(samples, duration))
       await fetch(`${WORKER_URL}/waveform?file=${encodeURIComponent(fileKey)}`, {
         method: 'PUT',
