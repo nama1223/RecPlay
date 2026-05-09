@@ -1,74 +1,97 @@
 /**
  * Compute a downsampled waveform from an audio URL.
- * - Uses OfflineAudioContext at low sample rate for speed
- * - Stereo: picks the channel with larger dynamic range (peak)
- * - Normalizes so the loudest bin = 1.0 (pseudo-normalize for quiet recordings)
- * - Returns one Float32Array with one bin per second of audio
+ *
+ * Uses HTMLMediaElement + AnalyserNode played at 16x speed.
+ * Avoids loading the entire file into memory at once, which would crash
+ * on large files (Chrome's AudioBuffer limit is ~19 minutes @ 44100 Hz).
+ *
+ * - One bin per second of audio
+ * - Each bin = peak RMS amplitude within that second
+ * - Normalized so max bin = 1.0
  */
 export async function computeWaveform(
   audioUrl: string,
   duration: number,
   onProgress?: (pct: number) => void,
 ): Promise<Float32Array> {
-  onProgress?.(5)
+  onProgress?.(0)
 
-  const res = await fetch(audioUrl)
-  if (!res.ok) throw new Error(`音声の取得に失敗しました (${res.status})`)
+  const BINS = Math.ceil(duration)
+  const bins = new Float32Array(BINS)
 
-  onProgress?.(30)
-  const raw = await res.arrayBuffer()
+  const ctx = new AudioContext()
+  const analyser = ctx.createAnalyser()
+  analyser.fftSize = 2048
+  const bufferLength = analyser.fftSize
+  const dataArray = new Float32Array(bufferLength)
 
-  onProgress?.(55)
+  // Connect silent output so AudioContext stays running
+  const silentGain = ctx.createGain()
+  silentGain.gain.value = 0
+  analyser.connect(silentGain)
+  silentGain.connect(ctx.destination)
 
-  // Decode at low sample rate — keeps memory and CPU low
-  const TARGET_RATE = 8000
-  const numFrames = Math.ceil(duration * TARGET_RATE)
-  const numCh = 2 // request stereo so we can compare channels
+  const audio = new Audio()
+  // CORS required for Worker URLs; harmless for blob:
+  if (!audioUrl.startsWith('blob:')) audio.crossOrigin = 'anonymous'
+  audio.src = audioUrl
+  audio.volume = 0        // silent but still processed by Web Audio
+  audio.preload = 'auto'
+  audio.playbackRate = 16 // fast-forward to reduce real-time wait
 
-  const actx = new OfflineAudioContext(numCh, numFrames, TARGET_RATE)
-  const decoded = await actx.decodeAudioData(raw)
+  const source = ctx.createMediaElementSource(audio)
+  source.connect(analyser)
 
-  onProgress?.(80)
+  return new Promise<Float32Array>((resolve, reject) => {
+    let pollTimer: ReturnType<typeof setInterval> | null = null
 
-  const BINS = Math.ceil(duration) // one bin per second
-  const ch0 = decoded.getChannelData(0)
-  const ch1 = decoded.numberOfChannels > 1 ? decoded.getChannelData(1) : null
-
-  const binSize = Math.floor(ch0.length / BINS)
-
-  // Compute RMS bins for each available channel
-  function computeBins(data: Float32Array): Float32Array {
-    const bins = new Float32Array(BINS)
-    for (let i = 0; i < BINS; i++) {
-      let rms = 0
-      const end = Math.min(i * binSize + binSize, data.length)
-      for (let j = i * binSize; j < end; j++) {
-        rms += data[j] ** 2
-      }
-      bins[i] = Math.sqrt(rms / binSize)
+    const cleanup = () => {
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
+      ctx.close().catch(() => {})
     }
-    return bins
-  }
 
-  const bins0 = computeBins(ch0)
-  const bins1 = ch1 ? computeBins(ch1) : null
+    const finish = () => {
+      cleanup()
+      // Normalize so peak = 1.0
+      let peak = 0
+      for (let i = 0; i < bins.length; i++) if (bins[i] > peak) peak = bins[i]
+      if (peak > 0) for (let i = 0; i < bins.length; i++) bins[i] /= peak
+      onProgress?.(100)
+      resolve(bins)
+    }
 
-  // Pick channel with the larger peak (more dynamic range visible)
-  let result = bins0
-  if (bins1) {
-    const peak0 = Math.max(...bins0)
-    const peak1 = Math.max(...bins1)
-    if (peak1 > peak0) result = bins1
-  }
+    audio.addEventListener('error', () => {
+      cleanup()
+      reject(new Error('音声の読み込みに失敗しました'))
+    }, { once: true })
 
-  // Normalize so max = 1.0 (makes quiet recordings visible too)
-  const peak = Math.max(...result)
-  if (peak > 0) {
-    for (let i = 0; i < result.length; i++) result[i] /= peak
-  }
+    audio.addEventListener('ended', finish, { once: true })
 
-  onProgress?.(100)
-  return result
+    audio.addEventListener('canplay', async () => {
+      await ctx.resume()
+
+      // Poll every 20 ms; at 16x speed that covers 320 ms of audio per tick,
+      // so each second of audio is sampled ~3 times — no bins are missed.
+      pollTimer = setInterval(() => {
+        const binIdx = Math.floor(audio.currentTime)
+        if (binIdx >= 0 && binIdx < BINS) {
+          analyser.getFloatTimeDomainData(dataArray)
+          let rms = 0
+          for (let i = 0; i < bufferLength; i++) rms += dataArray[i] * dataArray[i]
+          const val = Math.sqrt(rms / bufferLength)
+          if (val > bins[binIdx]) bins[binIdx] = val // keep peak within each second
+        }
+        onProgress?.(Math.min(99, Math.round((audio.currentTime / duration) * 100)))
+      }, 20)
+
+      try {
+        await audio.play()
+      } catch (e) {
+        cleanup()
+        reject(e)
+      }
+    }, { once: true })
+  })
 }
 
 /** Serialize waveform to JSON-compatible object for storage */

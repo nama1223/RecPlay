@@ -63,7 +63,7 @@ export default function App() {
   const { settings, updateSettings } = useSettings()
   const { samples: waveformSamples, setSamples: setWaveformSamples, hasStored: waveformStored } = useWaveform(src, duration, fileKey)
   const [waveformGenerating, setWaveformGenerating] = useState(false)
-  const waveformGenPct = useRef(0)
+  const [waveformGenPct, setWaveformGenPct] = useState(0)
   const onRemoteUpdate = useCallback((secs: Section[]) => importSections(secs), [importSections])
   const { lastSyncedAt, isDirty } = useSectionSync(fileKey, mode, sections, onRemoteUpdate)
 
@@ -182,12 +182,15 @@ export default function App() {
 
   const handleGenerateWaveform = async () => {
     if (!src || !fileKey || duration <= 0) return
-    if (waveformStored) {
-      if (!confirm('波形データはすでに生成済みです。再生成しますか？')) return
-    }
+    const estMinutes = Math.ceil(duration / 16 / 60)
+    const msg = waveformStored
+      ? `波形データはすでに生成済みです。再生成しますか？\n（約${estMinutes}分かかります）`
+      : `波形を生成します。ファイルの長さによっては数分かかります（目安: 約${estMinutes}分）。\nPCからの実行を推奨します。続けますか？`
+    if (!confirm(msg)) return
     setWaveformGenerating(true)
+    setWaveformGenPct(0)
     try {
-      const samples = await computeWaveform(src, duration, (pct) => { waveformGenPct.current = pct })
+      const samples = await computeWaveform(src, duration, (pct) => setWaveformGenPct(pct))
       setWaveformSamples(samples)
       // Save to Worker
       const body = JSON.stringify(serializeWaveform(samples, duration))
@@ -248,7 +251,7 @@ export default function App() {
                 disabled={!fileKey || waveformGenerating}
               >🎵</button>
               {org ? org.name : 'RecPlay'}
-              {waveformGenerating && <span className="waveform-gen-status"> 波形生成中...</span>}
+              {waveformGenerating && <span className="waveform-gen-status"> 波形生成中... {waveformGenPct}%</span>}
             </span>
             <ModeSelector mode={mode} onChange={setMode} />
           </header>
