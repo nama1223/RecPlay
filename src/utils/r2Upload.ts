@@ -6,20 +6,35 @@ export interface UploadProgress {
   percent: number
 }
 
+/**
+ * Upload a file directly to R2 via presigned URL.
+ * Flow:
+ *   1. POST /presign  → Worker returns { url, key }  (only filename goes through Worker)
+ *   2. PUT {url}      → File body goes directly to R2  (no 100MB Worker limit)
+ */
 export async function uploadToR2(
   file: File,
   onProgress?: (p: UploadProgress) => void,
   orgId?: string,
 ): Promise<string> {
-  const timestamp = Date.now()
-  const safeName = file.name.replace(/[/\\#%?&=+<>"'\x00-\x1f]/g, '_')
-  const key = orgId ? `${orgId}/${timestamp}_${safeName}` : `${timestamp}_${safeName}`
+  // Step 1: get presigned PUT URL from Worker
+  const presignRes = await fetch(`${WORKER_URL}/presign`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename: file.name, orgId: orgId ?? 'default' }),
+  })
+  if (!presignRes.ok) {
+    const err = await presignRes.json().catch(() => ({}))
+    throw new Error(`プリサインURL取得失敗 (${presignRes.status}): ${(err as any).error ?? ''}`)
+  }
+  const { url, key } = await presignRes.json() as { url: string; key: string }
 
-  const uploadUrl = `${WORKER_URL}/upload?key=${encodeURIComponent(key)}`
-
+  // Step 2: PUT file directly to R2 (bypasses Cloudflare Workers 100MB limit)
   await new Promise<void>((resolve, reject) => {
     const xhr = new XMLHttpRequest()
-    xhr.open('PUT', uploadUrl)
+    xhr.open('PUT', url)
+    // Content-Type must match what was signed (UNSIGNED-PAYLOAD means any type is OK,
+    // but some clients need it set for the PUT to succeed)
     xhr.setRequestHeader('Content-Type', file.type || 'audio/mpeg')
 
     xhr.upload.onprogress = (e) => {
@@ -37,6 +52,7 @@ export async function uploadToR2(
       else reject(new Error(`アップロード失敗 (${xhr.status})`))
     }
     xhr.onerror = () => reject(new Error('ネットワークエラー'))
+    xhr.ontimeout = () => reject(new Error('タイムアウト'))
     xhr.send(file)
   })
 

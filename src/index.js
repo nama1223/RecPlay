@@ -24,6 +24,78 @@ function isAdmin(request, env) {
   return request.headers.get('Authorization') === `Bearer ${env.ADMIN_PASSWORD}`;
 }
 
+// ── AWS Sig V4 presigned URL (for R2 S3-compatible direct upload) ──────────
+async function hmacSHA256(key, data) {
+  const enc = new TextEncoder();
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    typeof key === 'string' ? enc.encode(key) : key,
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  return crypto.subtle.sign('HMAC', cryptoKey, typeof data === 'string' ? enc.encode(data) : data);
+}
+
+function toHex(buf) {
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function createPresignedPutUrl(env, key, expiresIn = 3600) {
+  const accessKeyId = env.R2_ACCESS_KEY_ID;
+  const secretKey   = env.R2_SECRET_ACCESS_KEY;
+  const accountId   = env.R2_ACCOUNT_ID;
+  const bucket      = env.R2_BUCKET_NAME;
+  if (!accessKeyId || !secretKey) throw new Error('R2 credentials not configured');
+
+  const region  = 'auto';
+  const service = 's3';
+  const host    = `${accountId}.r2.cloudflarestorage.com`;
+  const now     = new Date();
+  const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');       // YYYYMMDD
+  const timeStr = now.toISOString().replace(/[:\-]/g, '').slice(0, 15) + 'Z'; // YYYYMMDDTHHmmssZ
+
+  const credScope  = `${dateStr}/${region}/${service}/aws4_request`;
+  const credential = `${accessKeyId}/${credScope}`;
+
+  // Encode key — preserve slashes
+  const encodedKey = key.split('/').map((s) => encodeURIComponent(s)).join('/');
+
+  // Canonical query string (must be sorted)
+  const qParams = [
+    ['X-Amz-Algorithm',     'AWS4-HMAC-SHA256'],
+    ['X-Amz-Credential',    credential],
+    ['X-Amz-Date',          timeStr],
+    ['X-Amz-Expires',       String(expiresIn)],
+    ['X-Amz-SignedHeaders', 'host'],
+  ].sort(([a], [b]) => a.localeCompare(b));
+
+  const canonicalQS = qParams
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+    .join('&');
+
+  const canonicalRequest = [
+    'PUT',
+    `/${bucket}/${encodedKey}`,
+    canonicalQS,
+    `host:${host}\n`,
+    'host',
+    'UNSIGNED-PAYLOAD',
+  ].join('\n');
+
+  const reqHash = toHex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonicalRequest)));
+
+  const stringToSign = ['AWS4-HMAC-SHA256', timeStr, credScope, reqHash].join('\n');
+
+  let signingKey = await hmacSHA256('AWS4' + secretKey, dateStr);
+  signingKey = await hmacSHA256(signingKey, region);
+  signingKey = await hmacSHA256(signingKey, service);
+  signingKey = await hmacSHA256(signingKey, 'aws4_request');
+  const signature = toHex(await hmacSHA256(signingKey, stringToSign));
+
+  return `https://${host}/${bucket}/${encodedKey}?${canonicalQS}&X-Amz-Signature=${signature}`;
+}
+
 // Binding names match wrangler.jsonc:
 //   R2  → env.recplay_audio  (bucket: recplay-audio)
 //   KV  → env.RECPLAY_KV
@@ -39,7 +111,22 @@ export default {
     }
 
     try {
-      // PUT /upload?key={key} — ファイルをR2ネイティブバインディングで直接保存
+      // POST /presign — 署名付きPUT URLを発行（クライアントがR2へ直接アップロードするため）
+      if (method === 'POST' && pathname === '/presign') {
+        const { filename, orgId } = await request.json();
+        if (!filename || !orgId) return json({ error: 'filename and orgId required' }, 400);
+        const timestamp = Date.now();
+        const safeName = filename.replace(/[/\\#%?&=+<>"'\x00-\x1f]/g, '_');
+        const key = `${orgId}/${timestamp}_${safeName}`;
+        try {
+          const uploadUrl = await createPresignedPutUrl(env, key);
+          return json({ url: uploadUrl, key });
+        } catch (e) {
+          return json({ error: String(e) }, 500);
+        }
+      }
+
+      // PUT /upload?key={key} — ファイルをR2ネイティブバインディングで直接保存（小ファイル用フォールバック）
       if (method === 'PUT' && pathname === '/upload') {
         const key = url.searchParams.get('key');
         if (!key) return json({ error: 'missing key' }, 400);
