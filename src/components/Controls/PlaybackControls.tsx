@@ -38,6 +38,8 @@ export function PlaybackControls({
   const handleBack = () => {
     const threshold = currentTime - 0.5
     const prev = sections
+      // In play mode, skip the start of excluded sections
+      .filter((s) => mode !== 'play' || !s.isExcluded)
       .map((s) => s.startTime)
       .filter((t) => t < threshold)
       .sort((a, b) => b - a)[0]

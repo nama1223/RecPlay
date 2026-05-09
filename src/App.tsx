@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAudioPlayer } from './hooks/useAudioPlayer'
 import { useSections } from './hooks/useSections'
 import { useSeekBar } from './hooks/useSeekBar'
@@ -6,6 +6,7 @@ import { useSettings } from './hooks/useSettings'
 import { useWaveform } from './hooks/useWaveform'
 import { useSectionSync } from './hooks/useSectionSync'
 import { OrgInfo, getStoredOrgs, storeOrg } from './hooks/useOrgAuth'
+import { computeWaveform, serializeWaveform } from './utils/waveformCompute'
 import { SeekBar } from './components/SeekBar/SeekBar'
 import { PlaybackControls } from './components/Controls/PlaybackControls'
 import { SectionList } from './components/Sections/SectionList'
@@ -60,7 +61,9 @@ export default function App() {
   const { sections, addSection, updateSection, deleteSection, toggleExclude, importSections, reorderSections, undo, redo, undoCount, redoCount } = useSections()
   const { zoomIndex, zoomIn, zoomOut, secondsPerRow, numRows, initZoom } = useSeekBar(duration)
   const { settings, updateSettings } = useSettings()
-  const { samples: waveformSamples } = useWaveform(src, duration)
+  const { samples: waveformSamples, setSamples: setWaveformSamples, hasStored: waveformStored } = useWaveform(src, duration, fileKey)
+  const [waveformGenerating, setWaveformGenerating] = useState(false)
+  const waveformGenPct = useRef(0)
   const onRemoteUpdate = useCallback((secs: Section[]) => importSections(secs), [importSections])
   const { lastSyncedAt, isDirty } = useSectionSync(fileKey, mode, sections, onRemoteUpdate)
 
@@ -177,6 +180,29 @@ export default function App() {
     updateSection(activeSectionId, { endTime: Math.max(currentTime, sec.startTime + 0.1) })
   }
 
+  const handleGenerateWaveform = async () => {
+    if (!src || !fileKey || duration <= 0) return
+    if (waveformStored) {
+      if (!confirm('波形データはすでに生成済みです。再生成しますか？')) return
+    }
+    setWaveformGenerating(true)
+    try {
+      const samples = await computeWaveform(src, duration, (pct) => { waveformGenPct.current = pct })
+      setWaveformSamples(samples)
+      // Save to Worker
+      const body = JSON.stringify(serializeWaveform(samples, duration))
+      await fetch(`${WORKER_URL}/waveform?file=${encodeURIComponent(fileKey)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+      })
+    } catch (e) {
+      alert(`波形生成に失敗しました: ${e}`)
+    } finally {
+      setWaveformGenerating(false)
+    }
+  }
+
   const handleLogout = () => {
     sessionStorage.removeItem('adminPassword')
     setOrg(null)
@@ -214,7 +240,16 @@ export default function App() {
       {screen === 'player' && (
         <div className="app">
           <header className="app-header">
-            <span className="app-title">🎵 {org ? org.name : 'RecPlay'}</span>
+            <span className="app-title">
+              <button
+                className={`waveform-gen-btn${waveformGenerating ? ' generating' : ''}`}
+                onClick={fileKey && !waveformGenerating ? handleGenerateWaveform : undefined}
+                title={fileKey ? (waveformStored ? '波形を再生成' : '波形を生成') : '波形生成（ファイル未選択）'}
+                disabled={!fileKey || waveformGenerating}
+              >🎵</button>
+              {org ? org.name : 'RecPlay'}
+              {waveformGenerating && <span className="waveform-gen-status"> 波形生成中...</span>}
+            </span>
             <ModeSelector mode={mode} onChange={setMode} />
           </header>
 

@@ -52,7 +52,7 @@ export function SectionList({
   onReorder,
 }: Props) {
   const [dlAll, setDlAll] = useState(false)
-  const [filter, setFilter] = useState<FilterMode>('all')
+  const [filter, setFilter] = useState<FilterMode>(() => mode === 'play' ? 'play' : 'all')
   const [sortMode, setSortMode] = useState<SortMode>('registration')
   const [dragOverId, setDragOverId] = useState<string | null>(null)
   const dragFromId = useRef<string | null>(null)

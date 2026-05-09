@@ -103,16 +103,16 @@ export function SectionItem({
       {expanded && (
         <div className="section-item-actions">
           {mode === 'play' && (
-            <>
-              <button className="action-btn play" onClick={() => onPlay(section.startTime, section.endTime)}>
+            <div className="section-play-row">
+              <button className="action-btn play half" onClick={() => onPlay(section.startTime, section.endTime)}>
                 ▶ 区間再生
               </button>
               {audioSrc && (
-                <button className="action-btn download" onClick={handleDownload} disabled={downloading}>
-                  {downloading ? '...' : '⬇ クリップDL'}
+                <button className="action-btn download half" onClick={handleDownload} disabled={downloading}>
+                  {downloading ? '...' : '⬇ ダウンロード'}
                 </button>
               )}
-            </>
+            </div>
           )}
 
           {mode === 'edit' && (

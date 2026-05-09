@@ -137,6 +137,29 @@ export default {
         return json({ ok: true, key });
       }
 
+      // GET /waveform?file={key}
+      if (method === 'GET' && pathname === '/waveform') {
+        const fileKey = url.searchParams.get('file');
+        if (!fileKey) return json({ error: 'missing file param' }, 400);
+        const obj = await env.recplay_audio.get(`waveforms/${fileKey}.json`);
+        if (!obj) return new Response(null, { status: 404, headers: CORS_HEADERS });
+        return new Response(obj.body, {
+          status: 200,
+          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=86400' },
+        });
+      }
+
+      // PUT /waveform?file={key}
+      if (method === 'PUT' && pathname === '/waveform') {
+        const fileKey = url.searchParams.get('file');
+        if (!fileKey) return json({ error: 'missing file param' }, 400);
+        const body = await request.text();
+        await env.recplay_audio.put(`waveforms/${fileKey}.json`, body, {
+          httpMetadata: { contentType: 'application/json' },
+        });
+        return json({ ok: true });
+      }
+
       // GET /sections?file={key}
       if (method === 'GET' && pathname === '/sections') {
         const fileKey = url.searchParams.get('file');

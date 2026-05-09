@@ -931,6 +931,35 @@
 .sync-indicator.sync-clean { color: #a78bfa; }
 .sync-indicator.sync-dirty { color: #3a2e72; }
 
+/* ── Waveform generation ── */
+.waveform-gen-btn {
+  background: none;
+  border: none;
+  padding: 0 4px 0 0;
+  font-size: inherit;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+.waveform-gen-btn:not(:disabled):hover { opacity: 1; }
+.waveform-gen-btn:disabled { cursor: default; opacity: 0.4; }
+.waveform-gen-btn.generating { animation: pulse 1s infinite; }
+@keyframes pulse { 0%,100% { opacity: 0.5; } 50% { opacity: 1; } }
+
+.waveform-gen-status {
+  font-size: 10px;
+  color: #9988cc;
+  font-weight: 400;
+  margin-left: 4px;
+}
+
+/* ── Section play row (横並び) ── */
+.section-play-row {
+  display: flex;
+  gap: 6px;
+}
+.action-btn.half { flex: 1; }
+
 /* ── Auth page ── */
 .auth-page {
   display: flex;
