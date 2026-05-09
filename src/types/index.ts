@@ -1,4 +1,4 @@
-export const ZOOM_LEVELS = [10, 20, 40, 80, 150, 300, 600] as const
+export const ZOOM_LEVELS = [10, 20, 40, 80, 150, 300, 600, 1200] as const
 export type ZoomLevel = typeof ZOOM_LEVELS[number]
 
 export type AppMode = 'play' | 'edit' | 'settings'
