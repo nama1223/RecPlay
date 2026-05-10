@@ -7,6 +7,7 @@ import { useWaveform } from './hooks/useWaveform'
 import { useSectionSync } from './hooks/useSectionSync'
 import { OrgInfo, getStoredOrgs, storeOrg } from './hooks/useOrgAuth'
 import { computeWaveform, serializeWaveform, getWaveformResumeInfo, clearWaveformResume } from './utils/waveformCompute'
+import { normalizeFile, NormPhase } from './utils/normalize'
 import { SeekBar } from './components/SeekBar/SeekBar'
 import { PlaybackControls } from './components/Controls/PlaybackControls'
 import { SectionList } from './components/Sections/SectionList'
@@ -65,9 +66,14 @@ export default function App() {
   const { sections, addSection, updateSection, deleteSection, toggleExclude, importSections, reorderSections, undo, redo, undoCount, redoCount } = useSections()
   const { zoomIndex, zoomIn, zoomOut, secondsPerRow, numRows, initZoom } = useSeekBar(duration)
   const { settings, updateSettings } = useSettings()
-  const { samples: waveformSamples, setSamples: setWaveformSamples, hasStored: waveformStored } = useWaveform(src, duration, fileKey)
+  const { samples: waveformSamples, setSamples: setWaveformSamples, hasStored: waveformStored, peakLevel: waveformPeakLevel } = useWaveform(src, duration, fileKey)
   const [waveformGenerating, setWaveformGenerating] = useState(false)
   const [waveformGenPct, setWaveformGenPct] = useState(0)
+  const [waveMenuOpen, setWaveMenuOpen] = useState(false)
+  const waveMenuRef = useRef<HTMLDivElement>(null)
+  const [normalizing, setNormalizing] = useState(false)
+  const [normPct, setNormPct] = useState(0)
+  const [normPhase, setNormPhase] = useState<NormPhase>('encode')
   const onRemoteUpdate = useCallback((secs: Section[]) => importSections(secs), [importSections])
   const { lastSyncedAt, isDirty } = useSectionSync(fileKey, fileLoadCounter, mode, sections, onRemoteUpdate)
 
@@ -218,7 +224,7 @@ export default function App() {
     setWaveformGenerating(true)
     setWaveformGenPct(resumeInfo?.pct ?? 0)
     try {
-      const samples = await computeWaveform(
+      const { samples, peakLevel } = await computeWaveform(
         src,
         duration,
         (pct, displayBins) => {
@@ -228,8 +234,8 @@ export default function App() {
         resumeKey,
       )
       setWaveformSamples(samples)
-      // Save completed waveform to Worker
-      const body = JSON.stringify(serializeWaveform(samples, duration))
+      // Save completed waveform (including peakLevel) to Worker
+      const body = JSON.stringify(serializeWaveform(samples, duration, peakLevel))
       await fetch(`${WORKER_URL}/waveform?file=${encodeURIComponent(fileKey)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -241,6 +247,40 @@ export default function App() {
       setWaveformGenerating(false)
     }
   }
+
+  const handleNormalizeFile = async () => {
+    if (!src || !fileKey || !waveformPeakLevel || duration <= 0) return
+    setWaveMenuOpen(false)
+    const estMin = Math.ceil(duration / 300 * 8 / 60) // rough estimate
+    if (!confirm(
+      `ファイル全体をノーマライズしてダウンロードします。\n` +
+      `目安: ${estMin} 分程度（ファイルサイズ分の通信が必要）\n\n続けますか？`
+    )) return
+    setNormalizing(true)
+    setNormPct(0)
+    try {
+      await normalizeFile(src, duration, fileKey, waveformPeakLevel, (pct, phase) => {
+        setNormPct(pct)
+        setNormPhase(phase)
+      })
+    } catch (e) {
+      alert(`ノーマライズに失敗しました: ${e}`)
+    } finally {
+      setNormalizing(false)
+    }
+  }
+
+  // Close wave menu when clicking outside
+  useEffect(() => {
+    if (!waveMenuOpen) return
+    const handler = (e: MouseEvent) => {
+      if (waveMenuRef.current && !waveMenuRef.current.contains(e.target as Node)) {
+        setWaveMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [waveMenuOpen])
 
   const handleLogout = () => {
     sessionStorage.removeItem('adminPassword')
@@ -280,14 +320,36 @@ export default function App() {
         <div className="app">
           <header className="app-header">
             <span className="app-title">
-              <button
-                className={`waveform-gen-btn${waveformGenerating ? ' generating' : ''}`}
-                onClick={fileKey && !waveformGenerating ? handleGenerateWaveform : undefined}
-                title={fileKey ? (waveformStored ? '波形を再生成' : '波形を生成') : '波形生成（ファイル未選択）'}
-                disabled={!fileKey || waveformGenerating}
-              >🎵</button>
+              <div className="wave-menu-wrapper" ref={waveMenuRef}>
+                <button
+                  className={`waveform-gen-btn${waveformGenerating || normalizing ? ' generating' : ''}`}
+                  onClick={fileKey && !waveformGenerating && !normalizing ? () => setWaveMenuOpen((v) => !v) : undefined}
+                  title={fileKey ? '波形・ノーマライズメニュー' : '（ファイル未選択）'}
+                  disabled={!fileKey || waveformGenerating || normalizing}
+                >🎵</button>
+                {waveMenuOpen && (
+                  <div className="wave-menu">
+                    <button className="wave-menu-item" onClick={handleGenerateWaveform}>
+                      📊 波形生成{waveformStored ? '（再生成）' : ''}
+                    </button>
+                    <button
+                      className="wave-menu-item"
+                      onClick={handleNormalizeFile}
+                      disabled={!waveformPeakLevel}
+                      title={!waveformPeakLevel ? '先に波形を生成してください' : undefined}
+                    >
+                      🔊 ノーマライズ（全体）
+                    </button>
+                  </div>
+                )}
+              </div>
               {org ? org.name : 'RecPlay'}
               {waveformGenerating && <span className="waveform-gen-status"> 波形生成中... {waveformGenPct}%</span>}
+              {normalizing && (
+                <span className="waveform-gen-status">
+                  {normPhase === 'scan' ? ' ピーク検出中...' : ' ノーマライズ中...'} {normPct}%
+                </span>
+              )}
             </span>
             <ModeSelector mode={mode} onChange={setMode} />
           </header>
@@ -386,6 +448,7 @@ export default function App() {
                   onToggleExclude={toggleExclude}
                   onActivate={setActiveSectionId}
                   scrollTarget={scrollTarget}
+                  hasWaveform={waveformStored && !!waveformPeakLevel}
                   onAddSection={handleAddSection}
                   onUndo={undo}
                   onRedo={redo}

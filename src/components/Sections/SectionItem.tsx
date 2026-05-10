@@ -3,6 +3,7 @@ import { Section, AppMode } from '../../types'
 import { formatTime } from '../../utils/timeFormat'
 import { FlagEditor } from './FlagEditor'
 import { downloadClip } from '../../utils/mp3Download'
+import { normalizeSection, NormPhase } from '../../utils/normalize'
 
 interface Props {
   section: Section
@@ -12,6 +13,7 @@ interface Props {
   editAdjustValues: number[]
   isActive: boolean
   scrollTarget?: { id: string; seq: number } | null
+  hasWaveform?: boolean
   onPlay: (start: number, end: number) => void
   onUpdate: (id: string, updates: Partial<Section>) => void
   onDelete: (id: string) => void
@@ -27,6 +29,7 @@ export function SectionItem({
   editAdjustValues,
   isActive,
   scrollTarget,
+  hasWaveform,
   onPlay,
   onUpdate,
   onDelete,
@@ -35,6 +38,9 @@ export function SectionItem({
 }: Props) {
   const [expanded, setExpanded] = useState(false)
   const [downloading, setDownloading] = useState(false)
+  const [normalizing, setNormalizing] = useState(false)
+  const [normPct, setNormPct] = useState(0)
+  const [normPhase, setNormPhase] = useState<NormPhase>('scan')
   const lastSeqRef = useRef<number>(-1)
 
   // Auto-expand when this section is the scroll target
@@ -73,6 +79,25 @@ export function SectionItem({
       alert(`ダウンロードに失敗しました: ${e}`)
     } finally {
       setDownloading(false)
+    }
+  }
+
+  const handleNormalizeSection = async () => {
+    if (!audioSrc || normalizing) return
+    setNormalizing(true)
+    setNormPct(0)
+    try {
+      await normalizeSection(
+        audioSrc,
+        section.startTime, section.endTime,
+        duration,
+        section.label,
+        (pct, phase) => { setNormPct(pct); setNormPhase(phase) },
+      )
+    } catch (e) {
+      alert(`ノーマライズに失敗しました: ${e}`)
+    } finally {
+      setNormalizing(false)
     }
   }
 
@@ -141,6 +166,17 @@ export function SectionItem({
                 onUpdate={onUpdate}
                 onClose={() => setExpanded(false)}
               />
+              {hasWaveform && !section.isExcluded && (
+                <button
+                  className="action-btn normalize"
+                  onClick={handleNormalizeSection}
+                  disabled={normalizing}
+                >
+                  {normalizing
+                    ? `${normPhase === 'scan' ? 'ピーク検出' : 'エンコード'}中... ${normPct}%`
+                    : '🔊 区間内の音量最大化（ノーマライズ）'}
+                </button>
+              )}
               <button
                 className="action-btn delete compact"
                 onClick={() => { if (confirm(`「${section.label}」を削除しますか？`)) onDelete(section.id) }}

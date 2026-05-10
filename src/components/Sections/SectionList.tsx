@@ -20,6 +20,7 @@ interface Props {
   onToggleExclude: (id: string) => void
   onActivate: (id: string) => void
   scrollTarget?: { id: string; seq: number } | null
+  hasWaveform?: boolean
   onAddSection: () => void
   onUndo: () => void
   onRedo: () => void
@@ -46,6 +47,7 @@ export function SectionList({
   onToggleExclude,
   onActivate,
   scrollTarget,
+  hasWaveform,
   onAddSection,
   onUndo,
   onRedo,
@@ -202,6 +204,7 @@ export function SectionList({
               editAdjustValues={editAdjustValues}
               isActive={activeSectionId === s.id}
               scrollTarget={scrollTarget}
+              hasWaveform={hasWaveform}
               onPlay={onPlay}
               onUpdate={onUpdate}
               onDelete={onDelete}

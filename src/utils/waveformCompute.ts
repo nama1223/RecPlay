@@ -8,6 +8,7 @@
  * - Partial waveform is displayed after every chunk via onProgress
  * - Resume state is auto-saved to localStorage so interrupted generation
  *   can continue from where it stopped
+ * - Also tracks the true sample peak (max |sample|) for normalization use
  */
 
 /** Seconds of audio decoded per chunk (stays under Chrome's 50 M sample limit) */
@@ -18,7 +19,7 @@ const WORKER_RANGE_CAP = 2 * 1024 * 1024
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 /** Fetch a byte range, issuing multiple sub-requests if the Worker caps them. */
-async function fetchRange(url: string, start: number, end: number): Promise<ArrayBuffer> {
+export async function fetchRange(url: string, start: number, end: number): Promise<ArrayBuffer> {
   const parts: ArrayBuffer[] = []
   let pos = start
   while (pos <= end) {
@@ -52,7 +53,7 @@ function binChannel(data: Float32Array, numBins: number): Float32Array {
 }
 
 /** Return a normalized copy of rawBins (max=1) for display. */
-function normalize(raw: Float32Array): Float32Array {
+function normalizeRms(raw: Float32Array): Float32Array {
   const d = new Float32Array(raw)
   let peak = 0
   for (let i = 0; i < d.length; i++) if (d[i] > peak) peak = d[i]
@@ -66,6 +67,7 @@ interface ResumeState {
   pct: number
   completedChunks: number
   rawBins: number[]
+  trueMax: number  // true audio peak, accumulated across chunks
 }
 
 export function getWaveformResumeInfo(resumeKey: string): { pct: number } | null {
@@ -84,6 +86,12 @@ export function clearWaveformResume(resumeKey: string) {
 
 // ── main ─────────────────────────────────────────────────────────────────────
 
+export interface WaveformResult {
+  samples: Float32Array
+  /** True peak (max |sample|, 0–1) across the whole file. Used for normalization. */
+  peakLevel: number
+}
+
 /**
  * Compute a waveform for `audioUrl` (must be a URL with Range-request support).
  *
@@ -97,7 +105,7 @@ export async function computeWaveform(
   duration: number,
   onProgress?: (pct: number, displayBins: Float32Array) => void,
   resumeKey?: string,
-): Promise<Float32Array> {
+): Promise<WaveformResult> {
   const BINS = Math.ceil(duration)
   const numChunks = Math.ceil(duration / CHUNK_SECS)
 
@@ -114,10 +122,11 @@ export async function computeWaveform(
     ? new Float32Array(resumeState.rawBins)
     : new Float32Array(BINS)
   const startChunk = resumeState?.completedChunks ?? 0
+  let trueMax = resumeState?.trueMax ?? 0
 
   // Report existing progress immediately on resume
   if (startChunk > 0) {
-    onProgress?.(Math.round((startChunk / numChunks) * 100), normalize(rawBins))
+    onProgress?.(Math.round((startChunk / numChunks) * 100), normalizeRms(rawBins))
   }
 
   // Get file size (needed for byte-range calculation)
@@ -146,7 +155,16 @@ export async function computeWaveform(
         continue
       }
 
-      // Pick the channel with the larger dynamic range
+      // Track true audio peak (max |sample|) across all channels and frames
+      for (let ch = 0; ch < decoded.numberOfChannels; ch++) {
+        const data = decoded.getChannelData(ch)
+        for (let i = 0; i < data.length; i++) {
+          const abs = Math.abs(data[i])
+          if (abs > trueMax) trueMax = abs
+        }
+      }
+
+      // Pick the channel with the larger dynamic range for the RMS waveform
       const ch0 = decoded.getChannelData(0)
       const ch1 = decoded.numberOfChannels > 1 ? decoded.getChannelData(1) : null
       const numBins = Math.ceil(Math.min(decoded.duration, tEnd - tStart))
@@ -167,12 +185,12 @@ export async function computeWaveform(
       }
 
       const pct = Math.round(((c + 1) / numChunks) * 100)
-      const display = normalize(rawBins)
+      const display = normalizeRms(rawBins)
       onProgress?.(pct, display)
 
       // Auto-save resume state after each chunk
       if (resumeKey) {
-        const state: ResumeState = { pct, completedChunks: c + 1, rawBins: Array.from(rawBins) }
+        const state: ResumeState = { pct, completedChunks: c + 1, rawBins: Array.from(rawBins), trueMax }
         try { localStorage.setItem(resumeKey, JSON.stringify(state)) } catch { /* quota */ }
       }
     }
@@ -182,17 +200,21 @@ export async function computeWaveform(
 
   if (resumeKey) localStorage.removeItem(resumeKey)
 
-  // Final normalization
-  let peak = 0
-  for (let i = 0; i < rawBins.length; i++) if (rawBins[i] > peak) peak = rawBins[i]
-  if (peak > 0) for (let i = 0; i < rawBins.length; i++) rawBins[i] /= peak
-  return rawBins
+  // Final RMS normalization (for display only — peakLevel is the raw true peak)
+  let rmsPeak = 0
+  for (let i = 0; i < rawBins.length; i++) if (rawBins[i] > rmsPeak) rmsPeak = rawBins[i]
+  if (rmsPeak > 0) for (let i = 0; i < rawBins.length; i++) rawBins[i] /= rmsPeak
+
+  return { samples: rawBins, peakLevel: trueMax }
 }
 
-export function serializeWaveform(samples: Float32Array, duration: number) {
-  return { samples: Array.from(samples), duration, generatedAt: new Date().toISOString() }
+export function serializeWaveform(samples: Float32Array, duration: number, peakLevel: number) {
+  return { samples: Array.from(samples), duration, peakLevel, generatedAt: new Date().toISOString() }
 }
 
-export function deserializeWaveform(data: { samples: number[] }): Float32Array {
-  return new Float32Array(data.samples)
+export function deserializeWaveform(data: { samples: number[]; peakLevel?: number }): WaveformResult {
+  return {
+    samples: new Float32Array(data.samples),
+    peakLevel: data.peakLevel ?? 0, // 0 = unknown (legacy data without peakLevel)
+  }
 }

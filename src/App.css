@@ -643,11 +643,12 @@
   font-weight: 500;
 }
 
-.action-btn.play     { background: #1e2a52; color: #7eb8f8; }
-.action-btn.download { background: #1a3028; color: #5ecfb8; }
-.action-btn.exclude  { background: #2a1a2a; color: #e87878; }
-.action-btn.restore  { background: #1a3028; color: #5ecfb8; }
-.action-btn.delete   { background: #1e1e2a; color: #664455; }
+.action-btn.play      { background: #1e2a52; color: #7eb8f8; }
+.action-btn.download  { background: #1a3028; color: #5ecfb8; }
+.action-btn.exclude   { background: #2a1a2a; color: #e87878; }
+.action-btn.restore   { background: #1a3028; color: #5ecfb8; }
+.action-btn.normalize { background: #1a2038; color: #a0c8ff; border: 1px solid #2a3a6a; }
+.action-btn.delete    { background: #1e1e2a; color: #664455; }
 .action-btn.delete.compact { padding: 3px 12px; margin: 0; }
 .action-btn:active { opacity: 0.7; }
 
@@ -944,6 +945,42 @@
 }
 .sync-indicator.sync-clean { color: #a78bfa; }
 .sync-indicator.sync-dirty { color: #3a2e72; }
+
+/* ── Wave menu (🎵 button dropdown) ── */
+.wave-menu-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.wave-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  background: #1e1e42;
+  border: 1px solid #4a3a7a;
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  min-width: 200px;
+  z-index: 200;
+  overflow: hidden;
+}
+
+.wave-menu-item {
+  display: block;
+  width: 100%;
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 13px;
+  color: #c084fc;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  border-bottom: 1px solid #2a2060;
+}
+.wave-menu-item:last-child { border-bottom: none; }
+.wave-menu-item:hover:not(:disabled) { background: #2a1e52; }
+.wave-menu-item:disabled { color: #5544aa; cursor: default; }
 
 /* ── Waveform generation ── */
 .waveform-gen-btn {
