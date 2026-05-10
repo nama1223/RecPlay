@@ -77,5 +77,5 @@ export function useWaveform(
     return () => { cancelled = true }
   }, [src, duration, fileKey])
 
-  return { samples, setSamples, peakLevel, loading, hasStored }
+  return { samples, setSamples, peakLevel, setPeakLevel, loading, hasStored }
 }

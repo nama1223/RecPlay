@@ -64,7 +64,7 @@ export default function App() {
   const { sections, addSection, updateSection, deleteSection, toggleExclude, importSections, reorderSections, undo, redo, undoCount, redoCount } = useSections()
   const { zoomIndex, zoomIn, zoomOut, secondsPerRow, numRows, initZoom } = useSeekBar(duration)
   const { settings, updateSettings } = useSettings()
-  const { samples: waveformSamples, setSamples: setWaveformSamples, hasStored: waveformStored, peakLevel: waveformPeakLevel } = useWaveform(src, duration, fileKey)
+  const { samples: waveformSamples, setSamples: setWaveformSamples, hasStored: waveformStored, peakLevel: waveformPeakLevel, setPeakLevel: setWaveformPeakLevel } = useWaveform(src, duration, fileKey)
   const [waveformGenerating, setWaveformGenerating] = useState(false)
   const [waveformGenPct, setWaveformGenPct] = useState(0)
   const [waveMenuOpen, setWaveMenuOpen] = useState(false)
@@ -206,6 +206,7 @@ export default function App() {
         resumeKey,
       )
       setWaveformSamples(samples)
+      setWaveformPeakLevel(peakLevel > 0 ? peakLevel : null)
       // Save completed waveform (including peakLevel) to Worker
       const body = JSON.stringify(serializeWaveform(samples, duration, peakLevel))
       await fetch(`${WORKER_URL}/waveform?file=${encodeURIComponent(fileKey)}`, {

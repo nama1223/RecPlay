@@ -7,17 +7,21 @@ export interface UploadProgress {
 }
 
 /**
- * Upload a file directly to R2 via presigned URL.
+ * Upload a file to R2 via Worker proxy.
  * Flow:
- *   1. POST /presign  → Worker returns { url, key }  (only filename goes through Worker)
- *   2. PUT {url}      → File body goes directly to R2  (no 100MB Worker limit)
+ *   1. POST /presign → Worker returns { key } (key = org/timestamp_filename)
+ *   2. PUT /upload?key={key} → Worker streams file body to R2 via native binding
+ *
+ * Note: Previously used presigned R2 URLs for direct upload, but R2's
+ * r2.cloudflarestorage.com endpoint requires bucket-level CORS configuration.
+ * Routing through the Worker avoids that requirement (Worker already has CORS headers).
  */
 export async function uploadToR2(
   file: File,
   onProgress?: (p: UploadProgress) => void,
   orgId?: string,
 ): Promise<string> {
-  // Step 1: get presigned PUT URL from Worker
+  // Step 1: get a key from Worker (orgId prefix + timestamp + safe filename)
   const presignRes = await fetch(`${WORKER_URL}/presign`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -25,16 +29,14 @@ export async function uploadToR2(
   })
   if (!presignRes.ok) {
     const err = await presignRes.json().catch(() => ({}))
-    throw new Error(`プリサインURL取得失敗 (${presignRes.status}): ${(err as any).error ?? ''}`)
+    throw new Error(`キー取得失敗 (${presignRes.status}): ${(err as any).error ?? ''}`)
   }
-  const { url, key } = await presignRes.json() as { url: string; key: string }
+  const { key } = await presignRes.json() as { url: string; key: string }
 
-  // Step 2: PUT file directly to R2 (bypasses Cloudflare Workers 100MB limit)
+  // Step 2: PUT through Worker (CORS handled by Worker, streams to R2 native binding)
   await new Promise<void>((resolve, reject) => {
     const xhr = new XMLHttpRequest()
-    xhr.open('PUT', url)
-    // Content-Type must match what was signed (UNSIGNED-PAYLOAD means any type is OK,
-    // but some clients need it set for the PUT to succeed)
+    xhr.open('PUT', `${WORKER_URL}/upload?key=${encodeURIComponent(key)}`)
     xhr.setRequestHeader('Content-Type', file.type || 'audio/mpeg')
 
     xhr.upload.onprogress = (e) => {
