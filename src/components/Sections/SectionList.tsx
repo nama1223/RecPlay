@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Section, AppMode } from '../../types'
 import { SectionItem } from './SectionItem'
 import { downloadWithExcludes } from '../../utils/mp3Download'
@@ -19,6 +19,7 @@ interface Props {
   onDelete: (id: string) => void
   onToggleExclude: (id: string) => void
   onActivate: (id: string) => void
+  scrollTarget?: { id: string; seq: number } | null
   onAddSection: () => void
   onUndo: () => void
   onRedo: () => void
@@ -44,6 +45,7 @@ export function SectionList({
   onDelete,
   onToggleExclude,
   onActivate,
+  scrollTarget,
   onAddSection,
   onUndo,
   onRedo,
@@ -56,6 +58,20 @@ export function SectionList({
   const [sortMode, setSortMode] = useState<SortMode>('registration')
   const [dragOverId, setDragOverId] = useState<string | null>(null)
   const dragFromId = useRef<string | null>(null)
+  const listRef = useRef<HTMLDivElement>(null)
+
+  // Scroll to the target section and auto-expand it
+  useEffect(() => {
+    if (!scrollTarget || !listRef.current) return
+    const listEl = listRef.current
+    const row = listEl.querySelector(`[data-section-id="${scrollTarget.id}"]`) as HTMLElement | null
+    if (!row) return
+    const header = listEl.querySelector('.section-list-header') as HTMLElement | null
+    const headerH = header?.clientHeight ?? 0
+    const listRect = listEl.getBoundingClientRect()
+    const rowRect = row.getBoundingClientRect()
+    listEl.scrollBy({ top: rowRect.top - listRect.top - headerH, behavior: 'smooth' })
+  }, [scrollTarget])
 
   const cycleFilter = () => {
     setFilter((f) => FILTER_CYCLE[(FILTER_CYCLE.indexOf(f) + 1) % FILTER_CYCLE.length])
@@ -113,7 +129,7 @@ export function SectionList({
   const handleDragEnd = () => { dragFromId.current = null; setDragOverId(null) }
 
   return (
-    <div className="section-list">
+    <div className="section-list" ref={listRef}>
       <div className="section-list-header">
         <span className="section-list-title">区間リスト</span>
         <div className="section-list-toolbar">
@@ -169,6 +185,7 @@ export function SectionList({
         displayed.map((s) => (
           <div
             key={s.id}
+            data-section-id={s.id}
             className={`section-drag-row${dragOverId === s.id ? ' drag-over' : ''}`}
             draggable={canDrag}
             onDragStart={() => handleDragStart(s.id)}
@@ -184,6 +201,7 @@ export function SectionList({
               audioSrc={audioSrc}
               editAdjustValues={editAdjustValues}
               isActive={activeSectionId === s.id}
+              scrollTarget={scrollTarget}
               onPlay={onPlay}
               onUpdate={onUpdate}
               onDelete={onDelete}

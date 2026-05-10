@@ -85,7 +85,7 @@ export function useSections() {
         startTime,
         endTime,
         isExcluded: false,
-        color: SECTION_COLORS[prev.length % SECTION_COLORS.length],
+        color: SECTION_COLORS[(num - 1) % SECTION_COLORS.length],
       }
       return [...prev, newSection]
     })

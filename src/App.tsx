@@ -53,6 +53,8 @@ export default function App() {
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null)
   // Incremented on every file selection (even same file) to force useSectionSync re-fetch
   const [fileLoadCounter, setFileLoadCounter] = useState(0)
+  // { id, seq } — seq increments each tap so repeated taps on the same label still trigger scroll
+  const [scrollTarget, setScrollTarget] = useState<{ id: string; seq: number } | null>(null)
 
   const {
     audioRef, currentTime, duration, isPlaying, src,
@@ -160,6 +162,11 @@ export default function App() {
       if (!confirm('現在の作業内容（区間設定など）が失われます。\nJSONで保存してから変更することをお勧めします。\n\n続けますか？')) return
     }
     setShowFileLoader(true)
+  }
+
+  const handleSectionLabelClick = (id: string) => {
+    setActiveSectionId(id)
+    setScrollTarget((prev) => ({ id, seq: (prev?.seq ?? 0) + 1 }))
   }
 
   const handleAddSection = () => {
@@ -345,6 +352,7 @@ export default function App() {
                 waveformSamples={waveformSamples}
                 onSeek={seek}
                 onSectionUpdate={updateSection}
+                onSectionLabelClick={handleSectionLabelClick}
               />
 
               {mode !== 'settings' && (
@@ -377,6 +385,7 @@ export default function App() {
                   onDelete={deleteSection}
                   onToggleExclude={toggleExclude}
                   onActivate={setActiveSectionId}
+                  scrollTarget={scrollTarget}
                   onAddSection={handleAddSection}
                   onUndo={undo}
                   onRedo={redo}

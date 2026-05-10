@@ -13,6 +13,7 @@ interface Props {
   mode: AppMode
   activeDragId: string | null
   onFlagPointerDown: (e: React.PointerEvent, sectionId: string, isStart: boolean) => void
+  onLabelClick?: (sectionId: string) => void
 }
 
 export function SeekBarRow({
@@ -24,6 +25,7 @@ export function SeekBarRow({
   mode,
   activeDragId,
   onFlagPointerDown,
+  onLabelClick,
 }: Props) {
   const rowStart = rowIndex * secondsPerRow
   const rowEnd = Math.min((rowIndex + 1) * secondsPerRow, duration)
@@ -51,21 +53,43 @@ export function SeekBarRow({
           const left = xPct(section.startTime)
           const right = 100 - xPct(section.endTime)
           const isExcluded = section.isExcluded
-          const hideInPlay = mode === 'play' && isExcluded
-
-          if (hideInPlay) {
-            return (
-              <div
-                key={section.id + '-ex'}
-                className="section-exclude-divider"
-                style={{ left: `${xPct(section.startTime)}%`, right: `${100 - xPct(section.endTime)}%` }}
-              />
-            )
-          }
+          const isPlayMode = mode === 'play'
 
           // Label is shown only on the first row of this section
           const isFirstRow = section.startTime >= rowStart && section.startTime < rowEnd
           const labelLeft = Math.max(left, 0)
+
+          // Excluded zone in play mode: prominent diagonal stripe at 90% height
+          if (isPlayMode && isExcluded) {
+            return (
+              <div key={section.id}>
+                <div
+                  className="section-overlay excluded"
+                  style={{
+                    left: `${left}%`,
+                    right: `${right}%`,
+                    top: '5%',
+                    bottom: '5%',
+                    background: 'rgba(90,50,130,0.55)',
+                    borderTop: '2px solid rgba(150,80,220,0.7)',
+                    borderBottom: '2px solid rgba(150,80,220,0.7)',
+                  }}
+                />
+                {isFirstRow && (
+                  <span
+                    className="section-seekbar-label"
+                    style={{
+                      left: `calc(${labelLeft}% + 3px)`,
+                      right: `${right}%`,
+                      color: 'rgba(170,110,230,0.9)',
+                    }}
+                  >
+                    🚫 {section.label}
+                  </span>
+                )}
+              </div>
+            )
+          }
 
           return (
             <div key={section.id}>
@@ -79,16 +103,24 @@ export function SeekBarRow({
                 }}
               />
               {isFirstRow && (
-                <span
-                  className="section-seekbar-label"
-                  style={{
-                    left: `calc(${labelLeft}% + 3px)`,
-                    right: `${right}%`,
-                    color: section.color,
-                  }}
-                >
-                  {section.isExcluded ? '🚫 ' : ''}{section.label}
-                </span>
+                isPlayMode ? (
+                  // Play mode: label is a tappable button that jumps to the section list
+                  <button
+                    className="section-seekbar-label section-seekbar-label-btn"
+                    style={{ left: `calc(${labelLeft}% + 3px)`, right: `${right}%`, color: section.color }}
+                    data-flag="label"
+                    onClick={() => onLabelClick?.(section.id)}
+                  >
+                    {section.label}
+                  </button>
+                ) : (
+                  <span
+                    className="section-seekbar-label"
+                    style={{ left: `calc(${labelLeft}% + 3px)`, right: `${right}%`, color: section.color }}
+                  >
+                    {section.isExcluded ? '🚫 ' : ''}{section.label}
+                  </span>
+                )
               )}
             </div>
           )

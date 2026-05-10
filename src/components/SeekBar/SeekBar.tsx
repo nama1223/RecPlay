@@ -12,6 +12,7 @@ interface Props {
   waveformSamples: Float32Array | null
   onSeek: (time: number) => void
   onSectionUpdate: (id: string, updates: Partial<Section>) => void
+  onSectionLabelClick?: (sectionId: string) => void
 }
 
 const MIN_SEEKBAR_H = 60
@@ -34,6 +35,7 @@ export function SeekBar({
   waveformSamples,
   onSeek,
   onSectionUpdate,
+  onSectionLabelClick,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -188,6 +190,7 @@ export function SeekBar({
               mode={mode}
               activeDragId={dragging?.sectionId ?? null}
               onFlagPointerDown={handleFlagPointerDown}
+              onLabelClick={onSectionLabelClick}
             />
           ))}
 

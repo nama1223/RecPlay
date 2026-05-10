@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Section, AppMode } from '../../types'
 import { formatTime } from '../../utils/timeFormat'
 import { FlagEditor } from './FlagEditor'
@@ -11,6 +11,7 @@ interface Props {
   audioSrc: string
   editAdjustValues: number[]
   isActive: boolean
+  scrollTarget?: { id: string; seq: number } | null
   onPlay: (start: number, end: number) => void
   onUpdate: (id: string, updates: Partial<Section>) => void
   onDelete: (id: string) => void
@@ -25,6 +26,7 @@ export function SectionItem({
   audioSrc,
   editAdjustValues,
   isActive,
+  scrollTarget,
   onPlay,
   onUpdate,
   onDelete,
@@ -33,6 +35,15 @@ export function SectionItem({
 }: Props) {
   const [expanded, setExpanded] = useState(false)
   const [downloading, setDownloading] = useState(false)
+  const lastSeqRef = useRef<number>(-1)
+
+  // Auto-expand when this section is the scroll target
+  useEffect(() => {
+    if (!scrollTarget || scrollTarget.id !== section.id) return
+    if (scrollTarget.seq === lastSeqRef.current) return
+    lastSeqRef.current = scrollTarget.seq
+    setExpanded(true)
+  }, [scrollTarget, section.id])
   const [editingLabel, setEditingLabel] = useState(false)
   const [labelVal, setLabelVal] = useState(section.label)
 
