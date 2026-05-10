@@ -81,7 +81,52 @@ export function useAudioPlayer() {
   const skip = useCallback((delta: number) => {
     const audio = audioRef.current
     if (!audio) return
-    audio.currentTime = Math.max(0, Math.min(audio.currentTime + delta, audio.duration || 0))
+
+    // When not in skip-excluded mode, do a plain seek
+    if (!skipExcludedRef.current || excludedZonesRef.current.length === 0) {
+      audio.currentTime = Math.max(0, Math.min(audio.currentTime + delta, audio.duration || 0))
+      return
+    }
+
+    // Skip delta seconds of *non-excluded* audio, jumping over excluded zones
+    const zones = [...excludedZonesRef.current].sort((a, b) => a.start - b.start)
+    const dur = audio.duration || 0
+    let pos = audio.currentTime
+    let remaining = Math.abs(delta)
+
+    if (delta > 0) {
+      for (const zone of zones) {
+        if (zone.end <= pos) continue        // zone is entirely behind us
+        const from = Math.max(zone.start, pos)
+        if (from > pos) {
+          // non-excluded gap before this zone
+          const gap = from - pos
+          if (gap >= remaining) { pos += remaining; remaining = 0; break }
+          remaining -= gap
+        }
+        // jump over the excluded zone
+        pos = zone.end
+      }
+      if (remaining > 0) pos += remaining
+      pos = Math.min(pos, dur)
+    } else {
+      for (const zone of [...zones].reverse()) {
+        if (zone.start >= pos) continue      // zone is entirely ahead of us
+        const to = Math.min(zone.end, pos)
+        if (to < pos) {
+          // non-excluded gap between zone end and current pos
+          const gap = pos - to
+          if (gap >= remaining) { pos -= remaining; remaining = 0; break }
+          remaining -= gap
+        }
+        // jump over the excluded zone (backward)
+        pos = zone.start
+      }
+      if (remaining > 0) pos -= remaining
+      pos = Math.max(pos, 0)
+    }
+
+    audio.currentTime = pos
   }, [])
 
   const playSection = useCallback((startTime: number, endTime: number) => {
