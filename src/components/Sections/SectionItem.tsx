@@ -84,6 +84,13 @@ export function SectionItem({
 
   const handleNormalizeSection = async () => {
     if (!audioSrc || normalizing) return
+    // Extract fileKey from Worker audio URL
+    let fileKey: string | null = null
+    try {
+      fileKey = new URL(audioSrc).searchParams.get('key')
+    } catch { /* local file, no key */ }
+    if (!fileKey) return
+
     setNormalizing(true)
     setNormPct(0)
     try {
@@ -91,9 +98,10 @@ export function SectionItem({
         audioSrc,
         section.startTime, section.endTime,
         duration,
-        section.label,
+        fileKey,
         (pct, phase) => { setNormPct(pct); setNormPhase(phase) },
       )
+      alert('✅ 区間ノーマライズ完了！ページを再読み込みして音声を更新してください。')
     } catch (e) {
       alert(`ノーマライズに失敗しました: ${e}`)
     } finally {
@@ -173,7 +181,7 @@ export function SectionItem({
                   disabled={normalizing}
                 >
                   {normalizing
-                    ? `${normPhase === 'scan' ? 'ピーク検出' : 'エンコード'}中... ${normPct}%`
+                    ? `${normPhase === 'scan' ? 'ピーク検出' : normPhase === 'upload' ? 'アップロード' : 'エンコード'}中... ${normPct}%`
                     : '🔊 区間内の音量最大化（ノーマライズ）'}
                 </button>
               )}

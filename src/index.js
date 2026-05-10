@@ -113,11 +113,18 @@ export default {
     try {
       // POST /presign — 署名付きPUT URLを発行（クライアントがR2へ直接アップロードするため）
       if (method === 'POST' && pathname === '/presign') {
-        const { filename, orgId } = await request.json();
-        if (!filename || !orgId) return json({ error: 'filename and orgId required' }, 400);
-        const timestamp = Date.now();
-        const safeName = filename.replace(/[/\\#%?&=+<>"'\x00-\x1f]/g, '_');
-        const key = `${orgId}/${timestamp}_${safeName}`;
+        const body = await request.json();
+        let key;
+        if (body.key) {
+          // Overwrite existing key (used by normalize-in-place)
+          key = body.key;
+        } else {
+          const { filename, orgId } = body;
+          if (!filename || !orgId) return json({ error: 'filename and orgId required' }, 400);
+          const timestamp = Date.now();
+          const safeName = filename.replace(/[/\\#%?&=+<>"'\x00-\x1f]/g, '_');
+          key = `${orgId}/${timestamp}_${safeName}`;
+        }
         try {
           const uploadUrl = await createPresignedPutUrl(env, key);
           return json({ url: uploadUrl, key });

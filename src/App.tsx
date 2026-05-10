@@ -236,6 +236,8 @@ export default function App() {
         setNormPct(pct)
         setNormPhase(phase)
       })
+      // Reload audio (cache-bust) so the overwritten R2 file is re-fetched
+      if (src) loadUrl(src.includes('?') ? `${src}&_r=${Date.now()}` : `${src}?_r=${Date.now()}`)
     } catch (e) {
       alert(`ノーマライズに失敗しました: ${e}`)
     } finally {
@@ -320,7 +322,7 @@ export default function App() {
               {waveformGenerating && <span className="waveform-gen-status"> 波形生成中... {waveformGenPct}%</span>}
               {normalizing && (
                 <span className="waveform-gen-status">
-                  {normPhase === 'scan' ? ' ピーク検出中...' : ' ノーマライズ中...'} {normPct}%
+                  {normPhase === 'scan' ? ' ピーク検出中...' : normPhase === 'upload' ? ' アップロード中...' : ' エンコード中...'} {normPct}%
                 </span>
               )}
             </span>

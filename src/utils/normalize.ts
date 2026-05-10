@@ -1,43 +1,32 @@
 /**
  * Audio normalization utility.
  *
- * Two modes:
- *   normalizeFile   — whole-file normalization using a pre-scanned peakLevel
- *                     (stored during waveform generation). One download pass only.
- *   normalizeSection — per-section normalization with a 2-pass approach:
- *                     pass 1 scans the section peak, pass 2 encodes with gain.
+ * Normalizes audio and overwrites the R2 file in-place (no download).
  *
- * Chunk strategy (same as waveformCompute):
- *   - Audio is decoded in 5-min chunks to stay under Chrome's 50M-sample limit.
- *   - Each chunk byte range is fetched via fetchRange(), which internally splits
- *     into ≤2MB sub-requests to respect the Worker's range cap.
+ * normalizeFile   — whole-file normalization using stored peakLevel.
+ *                   1-pass encode only.
  *
- * Output format: MP3 at 128 kbps via lamejs.
+ * normalizeSection — section normalization, 3 phases:
+ *                   1. scan peak in section byte range
+ *                   2. re-encode FULL file, applying gain only to section samples
+ *                   3. upload to R2 (overwriting original key)
+ *
+ * After upload completes the caller should reload the audio source.
  */
 
 import { Mp3Encoder } from '@breezystack/lamejs'
 import { fetchRange } from './waveformCompute'
+import { WORKER_URL } from '../config'
 
-const DECODE_CHUNK_SECS = 300          // same as waveform
+const DECODE_CHUNK_SECS = 300          // 5-min chunks (Chrome 50M-sample limit)
 const MP3_FRAME_SIZE = 1152            // samples per MP3 frame
-const TARGET_LEVEL = 0.95             // normalize to ~-0.45 dBFS (safety headroom)
+const TARGET_LEVEL = 0.95             // normalize to ~-0.45 dBFS
 const MP3_BITRATE = 128               // kbps
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 function f32ToI16(val: number): number {
   return Math.max(-32768, Math.min(32767, Math.round(val * 32767)))
-}
-
-function triggerDownload(blob: Blob, fileName: string) {
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = fileName
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  setTimeout(() => URL.revokeObjectURL(url), 10000)
 }
 
 function buildMp3Blob(parts: Int8Array[]): Blob {
@@ -48,11 +37,38 @@ function buildMp3Blob(parts: Int8Array[]): Blob {
   return new Blob([merged], { type: 'audio/mpeg' })
 }
 
+async function getFileSize(src: string): Promise<number> {
+  const head = await fetch(src, { method: 'HEAD' })
+  const clHead = parseInt(head.headers.get('Content-Length') ?? '0')
+  if (clHead > 0) return clHead
+  const rangeRes = await fetch(src, { headers: { Range: 'bytes=0-0' } })
+  const cr = rangeRes.headers.get('Content-Range')
+  const total = cr ? parseInt(cr.split('/')[1] ?? '0') : 0
+  if (total > 0) return total
+  throw new Error('ファイルサイズを取得できません')
+}
+
+/** Upload a blob to R2, overwriting the given key. */
+async function uploadToR2(blob: Blob, fileKey: string): Promise<void> {
+  const presignRes = await fetch(`${WORKER_URL}/presign`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key: fileKey }),
+  })
+  if (!presignRes.ok) throw new Error(`プリサインURL取得失敗 (${presignRes.status})`)
+  const { url } = await presignRes.json() as { url: string; key: string }
+  const putRes = await fetch(url, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'audio/mpeg' },
+    body: blob,
+  })
+  if (!putRes.ok) throw new Error(`R2アップロード失敗 (${putRes.status})`)
+}
+
 // ── audio processing ─────────────────────────────────────────────────────────
 
 /**
- * Scan a byte range for the true peak (max |sample|).
- * Also returns sample rate and channel count from the first decoded chunk.
+ * Scan a byte range for the true peak and audio format info.
  */
 async function scanPeak(
   url: string,
@@ -87,25 +103,28 @@ async function scanPeak(
 }
 
 /**
- * Decode a byte range, apply gain, and encode to MP3.
- * Appends encoded frames to mp3Parts.
+ * Encode full file, applying gainFn(sampleTimeSec) to each sample.
+ * For whole-file normalize: gainFn = () => gain
+ * For section normalize:    gainFn = (t) => inSection(t) ? gain : 1.0
  */
-async function encodeWithGain(
+async function encodeFullFile(
   url: string,
-  bStart: number, bEnd: number,
+  fileSize: number,
   chunkBytes: number,
-  gain: number,
+  sampleRate: number,
+  channels: number,
+  gainFn: (timeSec: number) => number,
   encoder: Mp3Encoder,
   mp3Parts: Int8Array[],
   onProgress?: (pct: number) => void,
 ): Promise<void> {
-  const rangeLen = bEnd - bStart + 1
-  const numChunks = Math.ceil(rangeLen / chunkBytes)
+  const numChunks = Math.ceil(fileSize / chunkBytes)
+  let accumulatedSamples = 0
   const actx = new AudioContext()
   try {
     for (let c = 0; c < numChunks; c++) {
-      const cs = bStart + c * chunkBytes
-      const ce = Math.min(cs + chunkBytes - 1, bEnd)
+      const cs = c * chunkBytes
+      const ce = Math.min(cs + chunkBytes - 1, fileSize - 1)
       try {
         const raw = await fetchRange(url, cs, ce)
         const decoded = await actx.decodeAudioData(raw)
@@ -114,10 +133,11 @@ async function encodeWithGain(
         const leftI16 = new Int16Array(ch0.length)
         const rightI16 = ch1 ? new Int16Array(ch1.length) : null
         for (let i = 0; i < ch0.length; i++) {
-          leftI16[i] = f32ToI16(ch0[i] * gain)
-          if (rightI16 && ch1) rightI16[i] = f32ToI16(ch1[i] * gain)
+          const g = gainFn((accumulatedSamples + i) / sampleRate)
+          leftI16[i] = f32ToI16(ch0[i] * g)
+          if (rightI16 && ch1) rightI16[i] = f32ToI16(ch1[i] * g)
         }
-        // Feed to MP3 encoder in frame-size chunks
+        accumulatedSamples += ch0.length
         for (let i = 0; i < leftI16.length; i += MP3_FRAME_SIZE) {
           const l = leftI16.subarray(i, i + MP3_FRAME_SIZE)
           const r = rightI16?.subarray(i, i + MP3_FRAME_SIZE)
@@ -132,26 +152,12 @@ async function encodeWithGain(
 
 // ── public API ────────────────────────────────────────────────────────────────
 
-export type NormPhase = 'encode' | 'scan'
+export type NormPhase = 'scan' | 'encode' | 'upload'
 
 /**
- * Normalize an entire file and download the result.
- * Uses the stored peakLevel (from waveform generation) — no extra scan pass needed.
+ * Normalize entire file and overwrite in R2.
+ * Uses stored peakLevel — no scan pass needed.
  */
-async function getFileSize(src: string): Promise<number> {
-  // Try HEAD first; fall back to a small GET with Range to read Content-Range
-  const head = await fetch(src, { method: 'HEAD' })
-  const clHead = parseInt(head.headers.get('Content-Length') ?? '0')
-  if (clHead > 0) return clHead
-
-  const rangeRes = await fetch(src, { headers: { Range: 'bytes=0-0' } })
-  const cr = rangeRes.headers.get('Content-Range') // "bytes 0-0/TOTAL"
-  const total = cr ? parseInt(cr.split('/')[1] ?? '0') : 0
-  if (total > 0) return total
-
-  throw new Error('ファイルサイズを取得できません（HEADもRangeも失敗）')
-}
-
 export async function normalizeFile(
   src: string,
   duration: number,
@@ -163,13 +169,12 @@ export async function normalizeFile(
   if (!fileSize) throw new Error('ファイルサイズを取得できません')
 
   const chunkBytes = Math.ceil((DECODE_CHUNK_SECS / duration) * fileSize)
-  const gain = Math.min(TARGET_LEVEL / storedPeakLevel, 20) // cap gain at 20x
+  const gain = Math.min(TARGET_LEVEL / storedPeakLevel, 20)
 
-  // Probe format from the first chunk
+  // Probe sampleRate/channels from first chunk
   let sampleRate = 44100, channels = 2
   try {
-    const probeEnd = Math.min(chunkBytes - 1, fileSize - 1)
-    const probeRaw = await fetchRange(src, 0, probeEnd)
+    const probeRaw = await fetchRange(src, 0, Math.min(chunkBytes - 1, fileSize - 1))
     const actx = new AudioContext()
     const decoded = await actx.decodeAudioData(probeRaw)
     sampleRate = decoded.sampleRate
@@ -180,52 +185,64 @@ export async function normalizeFile(
   const encoder = new Mp3Encoder(channels, sampleRate, MP3_BITRATE)
   const mp3Parts: Int8Array[] = []
 
-  await encodeWithGain(src, 0, fileSize - 1, chunkBytes, gain, encoder, mp3Parts,
+  await encodeFullFile(src, fileSize, chunkBytes, sampleRate, channels,
+    () => gain,
+    encoder, mp3Parts,
     (pct) => onProgress(pct, 'encode'))
 
   const tail = encoder.flush()
   if (tail.length > 0) mp3Parts.push(tail)
 
-  const baseName = fileKey.split('/').pop() ?? 'normalized'
-  const outName = baseName.replace(/\.[^.]+$/, '') + '_normalized.mp3'
-  triggerDownload(buildMp3Blob(mp3Parts), outName)
+  onProgress(0, 'upload')
+  await uploadToR2(buildMp3Blob(mp3Parts), fileKey)
+  onProgress(100, 'upload')
 }
 
 /**
- * Normalize a section and download the result (2-pass: scan then encode).
+ * Normalize a section in-place: re-encodes full file with gain applied
+ * only to samples within [startTime, endTime]. Overwrites R2 file.
+ *
+ * Phases: scan (section peak) → encode (full file) → upload
  */
 export async function normalizeSection(
   src: string,
   startTime: number,
   endTime: number,
   duration: number,
-  sectionLabel: string,
+  fileKey: string,
   onProgress: (pct: number, phase: NormPhase) => void,
 ): Promise<void> {
   const fileSize = await getFileSize(src)
   if (!fileSize) throw new Error('ファイルサイズを取得できません')
 
+  const chunkBytes = Math.ceil((DECODE_CHUNK_SECS / duration) * fileSize)
+
+  // Pass 1: scan section peak
+  const sectionDuration = endTime - startTime
   const bStart = Math.floor((startTime / duration) * fileSize)
   const bEnd = Math.min(Math.ceil((endTime / duration) * fileSize) - 1, fileSize - 1)
-  const sectionDuration = endTime - startTime
-  const chunkBytes = Math.ceil((Math.min(DECODE_CHUNK_SECS, sectionDuration) / sectionDuration) * (bEnd - bStart + 1))
+  const sectionChunkBytes = Math.ceil((Math.min(DECODE_CHUNK_SECS, sectionDuration) / sectionDuration) * (bEnd - bStart + 1))
 
-  // Pass 1: scan peak
-  const { peak, sampleRate, channels } = await scanPeak(src, bStart, bEnd, chunkBytes,
+  const { peak, sampleRate, channels } = await scanPeak(src, bStart, bEnd, sectionChunkBytes,
     (pct) => onProgress(pct, 'scan'))
   if (peak <= 0) throw new Error('ピークを検出できませんでした')
 
   const gain = Math.min(TARGET_LEVEL / peak, 20)
+  const gainFn = (t: number) => (t >= startTime && t <= endTime) ? gain : 1.0
 
-  // Pass 2: encode with gain
+  // Pass 2: re-encode full file with selective gain
   const encoder = new Mp3Encoder(channels, sampleRate, MP3_BITRATE)
   const mp3Parts: Int8Array[] = []
 
-  await encodeWithGain(src, bStart, bEnd, chunkBytes, gain, encoder, mp3Parts,
+  await encodeFullFile(src, fileSize, chunkBytes, sampleRate, channels,
+    gainFn,
+    encoder, mp3Parts,
     (pct) => onProgress(pct, 'encode'))
 
   const tail = encoder.flush()
   if (tail.length > 0) mp3Parts.push(tail)
 
-  triggerDownload(buildMp3Blob(mp3Parts), `${sectionLabel}_normalized.mp3`)
+  onProgress(0, 'upload')
+  await uploadToR2(buildMp3Blob(mp3Parts), fileKey)
+  onProgress(100, 'upload')
 }
