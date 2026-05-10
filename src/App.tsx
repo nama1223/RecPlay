@@ -12,7 +12,6 @@ import { SeekBar } from './components/SeekBar/SeekBar'
 import { PlaybackControls } from './components/Controls/PlaybackControls'
 import { SectionList } from './components/Sections/SectionList'
 import { ModeSelector } from './components/ModeSelector'
-import { FileLoader } from './components/FileLoader'
 import { SettingsPanel } from './components/SettingsPanel'
 import { AuthPage } from './components/AuthPage'
 import { FileListPage } from './components/FileListPage'
@@ -50,7 +49,6 @@ export default function App() {
   const [fileLoaded, setFileLoaded] = useState(false)
   const [fileName, setFileName] = useState('')
   const [fileKey, setFileKey] = useState<string | null>(null)
-  const [showFileLoader, setShowFileLoader] = useState(false)
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null)
   // Incremented on every file selection (even same file) to force useSectionSync re-fetch
   const [fileLoadCounter, setFileLoadCounter] = useState(0)
@@ -134,25 +132,6 @@ export default function App() {
     setSkipExcluded(mode === 'play')
   }, [mode, setSkipExcluded])
 
-  const handleFileLoad = (file: File) => {
-    loadFile(file)
-    setFileName(file.name)
-    setFileKey(null)
-    setFileLoaded(true)
-    setShowFileLoader(false)
-    setScreen('player')
-  }
-
-  const handleUrlLoad = (url: string) => {
-    const decoded = decodeURIComponent(url)
-    loadUrl(decoded)
-    setFileName(decoded.split('/').pop() ?? decoded)
-    setFileKey(keyFromUrl(decoded))
-    setFileLoaded(true)
-    setShowFileLoader(false)
-    setScreen('player')
-  }
-
   const handleFileSelect = (url: string, key: string, name: string) => {
     loadUrl(url)
     setFileName(name)
@@ -161,13 +140,6 @@ export default function App() {
     setScreen('player')
     setFileLoadCounter((c) => c + 1) // force useSectionSync re-fetch (even for same file)
     importSections([])               // clear UI immediately; sync is blocked until remote loads
-  }
-
-  const handleChangeFile = () => {
-    if (sections.length > 0 || duration > 0) {
-      if (!confirm('現在の作業内容（区間設定など）が失われます。\nJSONで保存してから変更することをお勧めします。\n\n続けますか？')) return
-    }
-    setShowFileLoader(true)
   }
 
   const handleSectionLabelClick = (id: string) => {
@@ -354,14 +326,7 @@ export default function App() {
             <ModeSelector mode={mode} onChange={setMode} />
           </header>
 
-          {showFileLoader && (
-            <div className="modal-overlay">
-              <button className="modal-close" onClick={() => setShowFileLoader(false)}>✕ キャンセル</button>
-              <FileLoader onFileLoad={handleFileLoad} onUrlLoad={handleUrlLoad} orgId={org?.id} />
-            </div>
-          )}
-
-          {fileLoaded && !showFileLoader && (
+          {fileLoaded && (
             <div className="player">
               <div className="file-bar">
                 <span className="file-name" title={fileName}>{fileName}</span>
@@ -464,11 +429,6 @@ export default function App() {
             </div>
           )}
 
-          {!fileLoaded && !showFileLoader && (
-            <div className="app-body">
-              <FileLoader onFileLoad={handleFileLoad} onUrlLoad={handleUrlLoad} orgId={org?.id} />
-            </div>
-          )}
         </div>
       )}
     </>

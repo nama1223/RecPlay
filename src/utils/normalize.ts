@@ -15,7 +15,7 @@
  * Output format: MP3 at 128 kbps via lamejs.
  */
 
-import { Mp3Encoder } from 'lamejs'
+import { Mp3Encoder } from '@breezystack/lamejs'
 import { fetchRange } from './waveformCompute'
 
 const DECODE_CHUNK_SECS = 300          // same as waveform
@@ -138,6 +138,20 @@ export type NormPhase = 'encode' | 'scan'
  * Normalize an entire file and download the result.
  * Uses the stored peakLevel (from waveform generation) — no extra scan pass needed.
  */
+async function getFileSize(src: string): Promise<number> {
+  // Try HEAD first; fall back to a small GET with Range to read Content-Range
+  const head = await fetch(src, { method: 'HEAD' })
+  const clHead = parseInt(head.headers.get('Content-Length') ?? '0')
+  if (clHead > 0) return clHead
+
+  const rangeRes = await fetch(src, { headers: { Range: 'bytes=0-0' } })
+  const cr = rangeRes.headers.get('Content-Range') // "bytes 0-0/TOTAL"
+  const total = cr ? parseInt(cr.split('/')[1] ?? '0') : 0
+  if (total > 0) return total
+
+  throw new Error('ファイルサイズを取得できません（HEADもRangeも失敗）')
+}
+
 export async function normalizeFile(
   src: string,
   duration: number,
@@ -145,8 +159,7 @@ export async function normalizeFile(
   storedPeakLevel: number,
   onProgress: (pct: number, phase: NormPhase) => void,
 ): Promise<void> {
-  const head = await fetch(src, { method: 'HEAD' })
-  const fileSize = parseInt(head.headers.get('Content-Length') ?? '0')
+  const fileSize = await getFileSize(src)
   if (!fileSize) throw new Error('ファイルサイズを取得できません')
 
   const chunkBytes = Math.ceil((DECODE_CHUNK_SECS / duration) * fileSize)
@@ -189,8 +202,7 @@ export async function normalizeSection(
   sectionLabel: string,
   onProgress: (pct: number, phase: NormPhase) => void,
 ): Promise<void> {
-  const head = await fetch(src, { method: 'HEAD' })
-  const fileSize = parseInt(head.headers.get('Content-Length') ?? '0')
+  const fileSize = await getFileSize(src)
   if (!fileSize) throw new Error('ファイルサイズを取得できません')
 
   const bStart = Math.floor((startTime / duration) * fileSize)

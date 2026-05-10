@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { WORKER_URL, buildWorkerAudioUrl } from '../config'
 import { OrgInfo } from '../hooks/useOrgAuth'
 import { uploadToR2, UploadProgress } from '../utils/r2Upload'
@@ -47,6 +47,7 @@ export function FileListPage({ org, onFileSelect, onLogout }: Props) {
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [uploadDone, setUploadDone] = useState(false)
+  const [isDragOver, setIsDragOver] = useState(false)
 
   const load = async () => {
     setLoading(true)
@@ -150,6 +151,31 @@ export function FileListPage({ org, onFileSelect, onLogout }: Props) {
     }
   }
 
+  const handleUploadDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragOver(true)
+  }, [])
+
+  const handleUploadDragLeave = useCallback((e: React.DragEvent) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+      setIsDragOver(false)
+    }
+  }, [])
+
+  const handleUploadDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragOver(false)
+    const file = e.dataTransfer.files?.[0]
+    if (!file) return
+    const isAudio = file.type.startsWith('audio/') || /\.(mp3|wav|ogg|flac|aac|m4a)$/i.test(file.name)
+    if (!isAudio) return
+    setShowUpload(true)
+    setUploadDone(false)
+    setUploadError(null)
+    setProgress(null)
+    doUpload(file)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   const resetUpload = () => {
     setUploadFile(null)
     setProgress(null)
@@ -168,12 +194,17 @@ export function FileListPage({ org, onFileSelect, onLogout }: Props) {
       <div className="file-list-body">
 
         {/* ── アップロードエリア ── */}
-        <div className="upload-section">
+        <div
+          className={`upload-section${isDragOver ? ' drag-over' : ''}`}
+          onDragOver={handleUploadDragOver}
+          onDragLeave={handleUploadDragLeave}
+          onDrop={handleUploadDrop}
+        >
           <button
             className="upload-toggle-btn"
             onClick={() => { setShowUpload((v) => !v); resetUpload() }}
           >
-            {showUpload ? '▲ 閉じる' : '↑ MP3をアップロード'}
+            {isDragOver ? '⬆ ドロップしてアップロード' : showUpload ? '▲ 閉じる' : '↑ MP3をアップロード'}
           </button>
 
           {showUpload && (
