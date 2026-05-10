@@ -7,7 +7,7 @@ import { useWaveform } from './hooks/useWaveform'
 import { useSectionSync } from './hooks/useSectionSync'
 import { OrgInfo, getStoredOrgs, storeOrg } from './hooks/useOrgAuth'
 import { computeWaveform, serializeWaveform, getWaveformResumeInfo, clearWaveformResume } from './utils/waveformCompute'
-import { normalizeFile, NormPhase } from './utils/normalize'
+import { normalizeFile, NormPhase, NORMALIZE_TARGET_LEVEL } from './utils/normalize'
 import { SeekBar } from './components/SeekBar/SeekBar'
 import { PlaybackControls } from './components/Controls/PlaybackControls'
 import { SectionList } from './components/Sections/SectionList'
@@ -221,14 +221,45 @@ export default function App() {
     }
   }
 
+  /** Re-save waveform to Worker with an updated peakLevel (after normalization). */
+  const saveWaveformPeakToWorker = useCallback(async (peak: number) => {
+    if (!fileKey || !waveformSamples) return
+    const body = JSON.stringify(serializeWaveform(waveformSamples, duration, peak))
+    await fetch(`${WORKER_URL}/waveform?file=${encodeURIComponent(fileKey)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+    }).catch(() => {}) // best-effort
+  }, [fileKey, waveformSamples, duration])
+
   const handleNormalizeFile = async () => {
     if (!src || !fileKey || !waveformPeakLevel || duration <= 0) return
     setWaveMenuOpen(false)
-    const estMin = Math.ceil(duration / 300 * 8 / 60) // rough estimate
+
+    // Compute gain and show preview
+    const rawGain = NORMALIZE_TARGET_LEVEL / waveformPeakLevel
+    const gain    = Math.min(rawGain, 20)
+    const gainDb  = 20 * Math.log10(gain)
+    const peakDb  = 20 * Math.log10(waveformPeakLevel)
+    const isCapped = rawGain > 20
+    const alreadyNorm = gainDb < 0.1
+
+    let gainLine: string
+    if (alreadyNorm) {
+      gainLine = `→ すでにノーマライズ済みです（変化なし）`
+    } else if (isCapped) {
+      gainLine = `→ 音量が非常に小さいため上限 +26.0 dB（20倍）を適用します`
+    } else {
+      gainLine = `→ +${gainDb.toFixed(1)} dB（${gain.toFixed(2)}倍）アップします`
+    }
+
+    const estMin = Math.ceil(duration / 300 * 8 / 60)
     if (!confirm(
-      `ファイル全体をノーマライズしてダウンロードします。\n` +
-      `目安: ${estMin} 分程度（ファイルサイズ分の通信が必要）\n\n続けますか？`
+      `ファイル全体をノーマライズして R2 を上書きします。\n\n` +
+      `現在のピーク: ${peakDb.toFixed(1)} dBFS\n${gainLine}\n\n` +
+      `目安: ${estMin} 分程度\n続けますか？`
     )) return
+
     setNormalizing(true)
     setNormPct(0)
     try {
@@ -236,14 +267,29 @@ export default function App() {
         setNormPct(pct)
         setNormPhase(phase)
       })
-      // Reload audio (cache-bust) so the overwritten R2 file is re-fetched
-      if (src) loadUrl(src.includes('?') ? `${src}&_r=${Date.now()}` : `${src}?_r=${Date.now()}`)
+      // Update peakLevel to TARGET_LEVEL so re-normalize doesn't over-amplify
+      setWaveformPeakLevel(NORMALIZE_TARGET_LEVEL)
+      await saveWaveformPeakToWorker(NORMALIZE_TARGET_LEVEL)
+      // Reload audio (cache-bust)
+      const bust = src.includes('?') ? `${src}&_r=${Date.now()}` : `${src}?_r=${Date.now()}`
+      loadUrl(bust)
     } catch (e) {
       alert(`ノーマライズに失敗しました: ${e}`)
     } finally {
       setNormalizing(false)
     }
   }
+
+  /** Called by SectionItem after section normalize completes. */
+  const handleSectionNormalized = useCallback(() => {
+    setWaveformPeakLevel(NORMALIZE_TARGET_LEVEL)
+    saveWaveformPeakToWorker(NORMALIZE_TARGET_LEVEL)
+    // Reload audio (cache-bust)
+    if (src) {
+      const bust = src.includes('?') ? `${src}&_r=${Date.now()}` : `${src}?_r=${Date.now()}`
+      loadUrl(bust)
+    }
+  }, [saveWaveformPeakToWorker, src, loadUrl])
 
   // Close wave menu when clicking outside
   useEffect(() => {
@@ -423,6 +469,7 @@ export default function App() {
                   undoCount={undoCount}
                   redoCount={redoCount}
                   onReorder={reorderSections}
+                  onSectionNormalized={handleSectionNormalized}
                 />
               )}
 

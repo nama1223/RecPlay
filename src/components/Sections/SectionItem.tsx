@@ -19,6 +19,7 @@ interface Props {
   onDelete: (id: string) => void
   onToggleExclude: (id: string) => void
   onActivate: (id: string) => void
+  onNormalized?: () => void
 }
 
 export function SectionItem({
@@ -35,6 +36,7 @@ export function SectionItem({
   onDelete,
   onToggleExclude,
   onActivate,
+  onNormalized,
 }: Props) {
   const [expanded, setExpanded] = useState(false)
   const [downloading, setDownloading] = useState(false)
@@ -101,7 +103,7 @@ export function SectionItem({
         fileKey,
         (pct, phase) => { setNormPct(pct); setNormPhase(phase) },
       )
-      alert('✅ 区間ノーマライズ完了！ページを再読み込みして音声を更新してください。')
+      onNormalized?.()  // updates peakLevel + reloads audio in App
     } catch (e) {
       alert(`ノーマライズに失敗しました: ${e}`)
     } finally {

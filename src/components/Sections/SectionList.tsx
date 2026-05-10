@@ -27,6 +27,7 @@ interface Props {
   undoCount: number
   redoCount: number
   onReorder: (newOrder: Section[]) => void
+  onSectionNormalized?: () => void
 }
 
 const FILTER_LABELS: Record<FilterMode, string> = { all: '全て', play: '再生', exclude: '除外' }
@@ -54,6 +55,7 @@ export function SectionList({
   undoCount,
   redoCount,
   onReorder,
+  onSectionNormalized,
 }: Props) {
   const [dlAll, setDlAll] = useState(false)
   const [filter, setFilter] = useState<FilterMode>(() => mode === 'play' ? 'play' : 'all')
@@ -210,6 +212,7 @@ export function SectionList({
               onDelete={onDelete}
               onToggleExclude={onToggleExclude}
               onActivate={onActivate}
+              onNormalized={onSectionNormalized}
             />
           </div>
         ))

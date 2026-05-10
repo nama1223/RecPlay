@@ -16,8 +16,11 @@ import { fetchRange } from './waveformCompute'
 import { WORKER_URL } from '../config'
 
 const DECODE_CHUNK_SECS = 300   // 5-min chunks (Chrome 50M-sample limit)
-const TARGET_LEVEL     = 0.95   // ~-0.45 dBFS
 const MP3_BITRATE      = 128    // kbps
+
+/** Normalize target peak (exported so callers can update stored peakLevel). */
+export const NORMALIZE_TARGET_LEVEL = 0.95  // ~-0.45 dBFS
+const TARGET_LEVEL = NORMALIZE_TARGET_LEVEL
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
