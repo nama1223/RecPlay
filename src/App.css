@@ -298,15 +298,18 @@
   line-height: 1.2;
 }
 
-/* Play mode: label is a tappable button */
+/* Play mode: compact tappable button at section start */
 .section-seekbar-label-btn {
   pointer-events: auto;
   cursor: pointer;
-  background: rgba(0,0,0,0.45);
+  background: rgba(0,0,0,0.50);
   border: 1px solid currentColor;
   border-radius: 3px;
-  padding: 0 3px;
+  padding: 0 4px;
   text-shadow: none;
+  max-width: 45%;      /* prevent overflowing into adjacent sections */
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ── Playhead ── */

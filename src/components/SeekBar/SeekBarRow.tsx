@@ -59,7 +59,7 @@ export function SeekBarRow({
           const isFirstRow = section.startTime >= rowStart && section.startTime < rowEnd
           const labelLeft = Math.max(left, 0)
 
-          // Excluded zone in play mode: prominent diagonal stripe at 90% height
+          // Excluded zone in play mode: same diagonal stripe as edit mode, 90% height, no label
           if (isPlayMode && isExcluded) {
             return (
               <div key={section.id}>
@@ -70,23 +70,11 @@ export function SeekBarRow({
                     right: `${right}%`,
                     top: '5%',
                     bottom: '5%',
-                    background: 'rgba(90,50,130,0.55)',
-                    borderTop: '2px solid rgba(150,80,220,0.7)',
-                    borderBottom: '2px solid rgba(150,80,220,0.7)',
+                    background: 'rgba(80,80,80,0.4)',
+                    borderTop: '2px solid #555',
+                    borderBottom: '2px solid #555',
                   }}
                 />
-                {isFirstRow && (
-                  <span
-                    className="section-seekbar-label"
-                    style={{
-                      left: `calc(${labelLeft}% + 3px)`,
-                      right: `${right}%`,
-                      color: 'rgba(170,110,230,0.9)',
-                    }}
-                  >
-                    🚫 {section.label}
-                  </span>
-                )}
               </div>
             )
           }
@@ -104,10 +92,10 @@ export function SeekBarRow({
               />
               {isFirstRow && (
                 isPlayMode ? (
-                  // Play mode: label is a tappable button that jumps to the section list
+                  // Play mode: compact button at section start, width = content only
                   <button
                     className="section-seekbar-label section-seekbar-label-btn"
-                    style={{ left: `calc(${labelLeft}% + 3px)`, right: `${right}%`, color: section.color }}
+                    style={{ left: `calc(${labelLeft}% + 3px)`, color: section.color }}
                     data-flag="label"
                     onClick={() => onLabelClick?.(section.id)}
                   >
