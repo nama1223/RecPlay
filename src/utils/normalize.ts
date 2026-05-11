@@ -2,11 +2,11 @@
  * Audio normalization — parallel Web Worker edition.
  *
  * Architecture:
- *   - File is split into PARALLELISM segments (up to 4, based on CPU cores).
+ *   - File split into PARALLELISM segments (up to 4, based on CPU cores).
  *   - Each segment runs in its own EncodeWorker concurrently.
- *   - Each Worker does decode + gain + encode entirely in its thread (main thread is free).
- *   - Main thread only fetches raw compressed bytes and transfers them to Workers.
- *   - Within each segment, chunk N+1 fetch overlaps with Worker processing chunk N.
+ *   - Main thread: fetch compressed bytes → decodeAudioData → transfer Float32Array to Worker.
+ *   - Worker: apply gain + f32→i16 + lamejs encode (all CPU work off main thread).
+ *   - 1-ahead pipeline: fetch chunk N+1 while Worker processes chunk N.
  *
  * normalizeFile    — 1-pass: uses stored peakLevel, encodes entire file in parallel.
  * normalizeSection — 3-phase: scan section peak → parallel re-encode full file
@@ -16,11 +16,10 @@
 import { fetchRange } from './waveformCompute'
 import { WORKER_URL } from '../config'
 
-const DECODE_CHUNK_SECS = 300   // 5-min chunks
+const DECODE_CHUNK_SECS = 300   // 5-min chunks (Chrome 50M-sample limit)
 const MP3_BITRATE      = 128    // kbps
 
 // Parallel Workers: min(CPU cores - 1, 4).
-// Capped at 4 to avoid excessive memory pressure (~100 MB per Worker per chunk).
 const PARALLELISM = Math.min(
   Math.max(1, (navigator.hardwareConcurrency ?? 4) - 1),
   4,
@@ -88,21 +87,24 @@ class EncodeWorker {
   }
 
   /**
-   * New path: send raw compressed bytes to Worker.
-   * Worker decodes → applies gain → encodes → returns MP3 bytes.
-   * Main thread is free while Worker runs.
+   * Send decoded Float32 PCM to Worker (zero-copy transfer).
+   * Worker applies gain, converts f32→i16, and lamejs-encodes.
    */
-  async process(
-    rawBuf: ArrayBuffer,
+  async processF32(
+    leftF32Buf: ArrayBuffer,
+    rightF32Buf: ArrayBuffer | null,
     sampleOffset: number,
     gainConst: number,
     sectionGain: number | null,
     sectionStartSamp: number,
     sectionEndSamp: number,
   ): Promise<Uint8Array> {
+    const transfer: Transferable[] = [leftF32Buf]
+    if (rightF32Buf) transfer.push(rightF32Buf)
     const { dataBuf } = await this.rpc<{ dataBuf: ArrayBuffer }>(
-      { type: 'process', rawBuf, sampleOffset, gainConst, sectionGain, sectionStartSamp, sectionEndSamp },
-      [rawBuf],
+      { type: 'processF32', leftF32Buf, rightF32Buf, sampleOffset,
+        gainConst, sectionGain, sectionStartSamp, sectionEndSamp },
+      transfer,
     )
     return new Uint8Array(dataBuf)
   }
@@ -125,8 +127,7 @@ async function scanPeak(
   const rangeLen = bEnd - bStart + 1
   const numChunks = Math.ceil(rangeLen / chunkBytes)
   let peak = 0, sampleRate = 44100, channels = 2
-  // OfflineAudioContext works for decodeAudioData and doesn't count against the
-  // real AudioContext limit (max 6 in Chrome).
+  // OfflineAudioContext: no real audio device — safe to create many, and no close() needed.
   const actx = new OfflineAudioContext(2, 1, 44100)
   for (let c = 0; c < numChunks; c++) {
     const cs = bStart + c * chunkBytes
@@ -151,11 +152,9 @@ async function scanPeak(
 /**
  * Encode one contiguous segment of chunks [chunkStart, chunkEnd) in a dedicated Worker.
  *
- * The Worker receives raw compressed bytes (zero-copy transfer) and does
- * decode + gain application + MP3 encode entirely in its own thread.
- * Main thread only handles fetching (network I/O, non-blocking).
- *
- * 1-ahead pipeline: fetch chunk N+1 while Worker processes chunk N.
+ * Main thread: fetch compressed bytes → decodeAudioData → copy Float32 channels → transfer to Worker.
+ * Worker: apply gain + f32→i16 + lamejs encode (pure CPU, off main thread).
+ * 1-ahead: fetch chunk N+1 while Worker encodes chunk N.
  */
 async function encodeSegment(
   url: string,
@@ -177,35 +176,45 @@ async function encodeSegment(
 
   const ew = new EncodeWorker()
   const parts: Uint8Array[] = []
+  const actx = new AudioContext()
 
-  /** Fetch raw compressed bytes for one chunk (no decoding on main thread). */
-  const fetchRaw = async (localIdx: number): Promise<ArrayBuffer | null> => {
+  /** Fetch + decode one chunk. Returns null on error (skip). */
+  const fetchDecode = async (localIdx: number): Promise<AudioBuffer | null> => {
     try {
       const globalChunk = chunkStart + localIdx
       const cs = globalChunk * chunkBytes
       const ce = Math.min(cs + chunkBytes - 1, fileSize - 1)
       if (cs >= fileSize) return null
-      return await fetchRange(url, cs, ce)
+      const raw = await fetchRange(url, cs, ce)
+      return await actx.decodeAudioData(raw)
     } catch { return null }
   }
 
   try {
     await ew.init(channels, sampleRate, MP3_BITRATE)
 
-    // Kick off chunk 0 fetch before the loop starts
-    let pending = fetchRaw(0)
+    // Kick off chunk 0 fetch before the loop
+    let pending = fetchDecode(0)
 
     for (let c = 0; c < numChunks; c++) {
       // Start chunk N+1 fetch NOW — runs concurrently with Worker processing chunk N
-      const next = c + 1 < numChunks ? fetchRaw(c + 1) : Promise.resolve(null)
+      const next = c + 1 < numChunks ? fetchDecode(c + 1) : Promise.resolve(null)
 
-      const raw = await pending
-      if (raw) {
+      const decoded = await pending
+      if (decoded) {
+        const ch0 = decoded.getChannelData(0)
+        const ch1 = decoded.numberOfChannels > 1 ? decoded.getChannelData(1) : null
+
+        // .slice() copies into a fresh ArrayBuffer so it can be transferred zero-copy to Worker
+        const leftF32Buf  = ch0.slice().buffer
+        const rightF32Buf = ch1 ? ch1.slice().buffer : null
+
         const sampleOffset = (chunkStart + c) * samplesPerChunk
-        // Transfer raw bytes to Worker (zero-copy).
-        // Worker decodes + applies gain + encodes — main thread is free.
-        const encoded = await ew.process(
-          raw, sampleOffset, gainConst, sectionGain, sectionStartSamp, sectionEndSamp,
+
+        // Transfer to Worker: gain + f32→i16 + encode all happen in Worker thread
+        const encoded = await ew.processF32(
+          leftF32Buf, rightF32Buf, sampleOffset,
+          gainConst, sectionGain, sectionStartSamp, sectionEndSamp,
         )
         if (encoded.length > 0) parts.push(encoded)
       }
@@ -218,6 +227,7 @@ async function encodeSegment(
     if (tail.length > 0) parts.push(tail)
   } finally {
     ew.terminate()
+    await actx.close().catch(() => {})
   }
 
   return parts
@@ -226,10 +236,6 @@ async function encodeSegment(
 /**
  * Parallel encode: splits file into PARALLELISM segments, each in its own Worker.
  * Returns ordered MP3 byte chunks ready to concatenate.
- *
- * gainConst      — gain for all samples (normalizeFile) or outside-section samples (normalizeSection)
- * sectionGain    — gain inside the section; null = constant gain for whole file
- * sectionStart/EndSamp — section boundary in samples (used only when sectionGain != null)
  */
 async function encodeFullFile(
   url: string,
@@ -246,7 +252,6 @@ async function encodeFullFile(
   const numChunks = Math.ceil(fileSize / chunkBytes)
   const parallelism = Math.max(1, Math.min(PARALLELISM, numChunks))
   const chunksPerSeg = Math.ceil(numChunks / parallelism)
-  // Approximate sample count per chunk (for gainFn time offset; exact count varies slightly)
   const samplesPerChunk = Math.round(DECODE_CHUNK_SECS * sampleRate)
 
   const segDone  = new Array(parallelism).fill(0)
@@ -291,7 +296,7 @@ export async function normalizeFile(
   const chunkBytes = Math.ceil((DECODE_CHUNK_SECS / duration) * fileSize)
   const gain = Math.min(TARGET_LEVEL / storedPeakLevel, 20)
 
-  // Probe audio format from first chunk (OfflineAudioContext — no real audio device needed)
+  // Probe audio format from first chunk
   let sampleRate = 44100, channels = 2
   try {
     const probeRaw = await fetchRange(src, 0, Math.min(chunkBytes - 1, fileSize - 1))
@@ -300,7 +305,7 @@ export async function normalizeFile(
     sampleRate = d.sampleRate; channels = d.numberOfChannels
   } catch { /* use defaults */ }
 
-  // Constant gain across entire file — sectionGain = null
+  // Constant gain across entire file (sectionGain = null)
   const parts = await encodeFullFile(
     src, fileSize, chunkBytes, sampleRate, channels,
     gain, null, 0, 0,
@@ -339,11 +344,11 @@ export async function normalizeSection(
   if (peak <= 0) throw new Error('ピークを検出できませんでした')
 
   const gain = Math.min(TARGET_LEVEL / peak, 20)
-  // Outside section → gainConst = 1.0, inside section → sectionGain = gain
   const sectionStartSamp = Math.round(startTime * sampleRate)
   const sectionEndSamp   = Math.round(endTime   * sampleRate)
 
   // Pass 2: encode full file in parallel with selective gain
+  // gainConst = 1.0 (outside section), sectionGain = gain (inside section)
   const parts = await encodeFullFile(
     src, fileSize, chunkBytes, sampleRate, channels,
     1.0, gain, sectionStartSamp, sectionEndSamp,
