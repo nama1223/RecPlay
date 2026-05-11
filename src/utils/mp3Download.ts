@@ -9,10 +9,16 @@ async function fetchByteRange(url: string, startByte: number, endByte: number): 
 }
 
 async function getFileSize(url: string): Promise<number> {
-  const res = await fetch(url, { method: 'HEAD' })
-  const len = res.headers.get('Content-Length')
-  if (!len) throw new Error('Content-Length header missing')
-  return parseInt(len, 10)
+  // Try HEAD + Content-Length first
+  const head = await fetch(url, { method: 'HEAD' })
+  const cl = parseInt(head.headers.get('Content-Length') ?? '0')
+  if (cl > 0) return cl
+  // Fallback: Range: bytes=0-0 → read total from Content-Range
+  const r = await fetch(url, { headers: { Range: 'bytes=0-0' } })
+  const cr = r.headers.get('Content-Range')
+  const total = cr ? parseInt(cr.split('/')[1] ?? '0') : 0
+  if (total > 0) return total
+  throw new Error('ファイルサイズを取得できません')
 }
 
 function timeToByte(time: number, duration: number, fileSize: number): number {
@@ -52,31 +58,46 @@ export async function downloadWithExcludes(
   filename: string,
 ): Promise<void> {
   const fileSize = await getFileSize(audioUrl)
+  if (fileSize <= 0) throw new Error(`ファイルサイズが取得できませんでした (${fileSize})`)
 
   const excluded = sections
     .filter((s) => s.isExcluded)
     .sort((a, b) => a.startTime - b.startTime)
 
-  // Build non-excluded segments
-  const segments: { start: number; end: number }[] = []
-  let cursor = 0
-  for (const zone of excluded) {
-    if (zone.startTime > cursor) segments.push({ start: cursor, end: zone.startTime })
-    cursor = Math.max(cursor, zone.endTime)
-  }
-  if (cursor < duration) segments.push({ start: cursor, end: duration })
+  // Build list of byte ranges to download (everything except excluded zones)
+  const byteRanges: { startByte: number; endByte: number }[] = []
 
-  if (segments.length === 0) throw new Error('全体が除外されています')
+  if (excluded.length === 0) {
+    // No excluded zones — download the whole file
+    byteRanges.push({ startByte: 0, endByte: fileSize - 1 })
+  } else {
+    let cursor = 0
+    for (const zone of excluded) {
+      if (zone.startTime > cursor) {
+        byteRanges.push({
+          startByte: timeToByte(cursor, duration, fileSize),
+          endByte: timeToByte(zone.startTime, duration, fileSize) - 1,
+        })
+      }
+      cursor = Math.max(cursor, zone.endTime)
+    }
+    if (cursor < duration) {
+      byteRanges.push({
+        startByte: timeToByte(cursor, duration, fileSize),
+        endByte: fileSize - 1,
+      })
+    }
+  }
+
+  // Filter out zero-length or invalid ranges
+  const validRanges = byteRanges.filter((r) => r.startByte <= r.endByte && r.startByte >= 0)
+  if (validRanges.length === 0) throw new Error('全体が除外されています')
 
   const buffers = await Promise.all(
-    segments.map((seg) => {
-      const s = timeToByte(seg.start, duration, fileSize)
-      const e = timeToByte(seg.end, duration, fileSize)
-      return fetchByteRange(audioUrl, s, e - 1)
-    }),
+    validRanges.map((r) => fetchByteRange(audioUrl, r.startByte, r.endByte)),
   )
 
-  // Concatenate ArrayBuffers
+  // Concatenate and trigger download
   const total = buffers.reduce((sum, b) => sum + b.byteLength, 0)
   const merged = new Uint8Array(total)
   let offset = 0

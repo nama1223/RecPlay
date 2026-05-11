@@ -218,9 +218,13 @@ export function SectionList({
         ))
       )}
 
-      {mode === 'play' && audioSrc && sections.some((s) => s.isExcluded) && (
+      {mode === 'play' && audioSrc && (
         <button className="download-all-btn" onClick={handleDownloadAll} disabled={dlAll}>
-          {dlAll ? 'ダウンロード中...' : '⬇ 除外区間を除いた全体をDL'}
+          {dlAll
+            ? 'ダウンロード中...'
+            : sections.some((s) => s.isExcluded)
+              ? '⬇ 除外区間を除いた全体をDL'
+              : '⬇ 全体をダウンロード'}
         </button>
       )}
     </div>
