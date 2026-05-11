@@ -1,5 +1,10 @@
 import { Section } from '../types'
 
+// Mobile browsers (and some desktop ones) truncate response.arrayBuffer() for
+// very large single requests. Fetch in chunks to stay within safe limits.
+// 8 MB ≈ 8 minutes of 128 kbps audio — well within any browser's limits.
+const FETCH_CHUNK_BYTES = 8 * 1024 * 1024
+
 async function fetchByteRange(url: string, startByte: number, endByte: number): Promise<ArrayBuffer> {
   const res = await fetch(url, {
     headers: { Range: `bytes=${startByte}-${endByte}` },
@@ -25,8 +30,7 @@ function timeToByte(time: number, duration: number, fileSize: number): number {
   return Math.round((time / duration) * fileSize)
 }
 
-function triggerDownload(buffer: ArrayBuffer, filename: string) {
-  const blob = new Blob([buffer], { type: 'audio/mpeg' })
+function triggerDownload(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -35,6 +39,21 @@ function triggerDownload(buffer: ArrayBuffer, filename: string) {
   a.click()
   document.body.removeChild(a)
   setTimeout(() => URL.revokeObjectURL(url), 10000)
+}
+
+/**
+ * Fetch [startByte, endByte] in FETCH_CHUNK_BYTES-sized pieces and stream into a Blob.
+ * Avoids loading the entire range into memory at once (mobile browser limit).
+ */
+async function fetchRangeChunked(url: string, startByte: number, endByte: number): Promise<Blob> {
+  const parts: ArrayBuffer[] = []
+  let pos = startByte
+  while (pos <= endByte) {
+    const chunkEnd = Math.min(pos + FETCH_CHUNK_BYTES - 1, endByte)
+    parts.push(await fetchByteRange(url, pos, chunkEnd))
+    pos = chunkEnd + 1
+  }
+  return new Blob(parts, { type: 'audio/mpeg' })
 }
 
 export async function downloadClip(
@@ -46,9 +65,9 @@ export async function downloadClip(
 ): Promise<void> {
   const fileSize = await getFileSize(audioUrl)
   const startByte = timeToByte(startTime, duration, fileSize)
-  const endByte = timeToByte(endTime, duration, fileSize)
-  const buffer = await fetchByteRange(audioUrl, startByte, endByte - 1)
-  triggerDownload(buffer, filename)
+  const endByte   = timeToByte(endTime,   duration, fileSize) - 1
+  const blob = await fetchRangeChunked(audioUrl, startByte, endByte)
+  triggerDownload(blob, filename)
 }
 
 export async function downloadWithExcludes(
@@ -64,47 +83,39 @@ export async function downloadWithExcludes(
     .filter((s) => s.isExcluded)
     .sort((a, b) => a.startTime - b.startTime)
 
-  // Build list of byte ranges to download (everything except excluded zones)
-  const byteRanges: { startByte: number; endByte: number }[] = []
+  // Build list of [startByte, endByte] segments to include (everything except excluded zones)
+  const segments: { startByte: number; endByte: number }[] = []
 
   if (excluded.length === 0) {
-    // No excluded zones — download the whole file
-    byteRanges.push({ startByte: 0, endByte: fileSize - 1 })
+    segments.push({ startByte: 0, endByte: fileSize - 1 })
   } else {
-    let cursor = 0
+    let cursor = 0  // in seconds
     for (const zone of excluded) {
       if (zone.startTime > cursor) {
-        byteRanges.push({
-          startByte: timeToByte(cursor, duration, fileSize),
-          endByte: timeToByte(zone.startTime, duration, fileSize) - 1,
+        segments.push({
+          startByte: timeToByte(cursor,          duration, fileSize),
+          endByte:   timeToByte(zone.startTime,  duration, fileSize) - 1,
         })
       }
       cursor = Math.max(cursor, zone.endTime)
     }
     if (cursor < duration) {
-      byteRanges.push({
+      segments.push({
         startByte: timeToByte(cursor, duration, fileSize),
-        endByte: fileSize - 1,
+        endByte:   fileSize - 1,
       })
     }
   }
 
-  // Filter out zero-length or invalid ranges
-  const validRanges = byteRanges.filter((r) => r.startByte <= r.endByte && r.startByte >= 0)
-  if (validRanges.length === 0) throw new Error('全体が除外されています')
+  // Filter out zero-length or inverted ranges (can happen at exact boundaries)
+  const validSegments = segments.filter((s) => s.startByte >= 0 && s.startByte <= s.endByte)
+  if (validSegments.length === 0) throw new Error('全体が除外されています')
 
-  const buffers = await Promise.all(
-    validRanges.map((r) => fetchByteRange(audioUrl, r.startByte, r.endByte)),
-  )
-
-  // Concatenate and trigger download
-  const total = buffers.reduce((sum, b) => sum + b.byteLength, 0)
-  const merged = new Uint8Array(total)
-  let offset = 0
-  for (const buf of buffers) {
-    merged.set(new Uint8Array(buf), offset)
-    offset += buf.byteLength
+  // Fetch each segment in small chunks → collect as Blob parts (avoids large ArrayBuffer in memory)
+  const blobParts: Blob[] = []
+  for (const seg of validSegments) {
+    blobParts.push(await fetchRangeChunked(audioUrl, seg.startByte, seg.endByte))
   }
 
-  triggerDownload(merged.buffer, filename)
+  triggerDownload(new Blob(blobParts, { type: 'audio/mpeg' }), filename)
 }
