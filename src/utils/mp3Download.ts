@@ -1,35 +1,5 @@
 import { Section } from '../types'
 
-// Mobile browsers (and some desktop ones) truncate response.arrayBuffer() for
-// very large single requests. Fetch in chunks to stay within safe limits.
-// 8 MB ≈ 8 minutes of 128 kbps audio — well within any browser's limits.
-const FETCH_CHUNK_BYTES = 8 * 1024 * 1024
-
-async function fetchByteRange(url: string, startByte: number, endByte: number): Promise<ArrayBuffer> {
-  const res = await fetch(url, {
-    headers: { Range: `bytes=${startByte}-${endByte}` },
-  })
-  if (!res.ok && res.status !== 206) throw new Error(`fetch failed: ${res.status}`)
-  return res.arrayBuffer()
-}
-
-async function getFileSize(url: string): Promise<number> {
-  // Try HEAD + Content-Length first
-  const head = await fetch(url, { method: 'HEAD' })
-  const cl = parseInt(head.headers.get('Content-Length') ?? '0')
-  if (cl > 0) return cl
-  // Fallback: Range: bytes=0-0 → read total from Content-Range
-  const r = await fetch(url, { headers: { Range: 'bytes=0-0' } })
-  const cr = r.headers.get('Content-Range')
-  const total = cr ? parseInt(cr.split('/')[1] ?? '0') : 0
-  if (total > 0) return total
-  throw new Error('ファイルサイズを取得できません')
-}
-
-function timeToByte(time: number, duration: number, fileSize: number): number {
-  return Math.round((time / duration) * fileSize)
-}
-
 function triggerDownload(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -42,20 +12,58 @@ function triggerDownload(blob: Blob, filename: string) {
 }
 
 /**
- * Fetch [startByte, endByte] in FETCH_CHUNK_BYTES-sized pieces and stream into a Blob.
- * Avoids loading the entire range into memory at once (mobile browser limit).
+ * Stream the full audio file chunk by chunk.
+ * Returns accumulated chunks and total byte count.
+ * Does NOT rely on Content-Length (Worker audio URLs may return wrong values).
  */
-async function fetchRangeChunked(url: string, startByte: number, endByte: number): Promise<Blob> {
-  const parts: ArrayBuffer[] = []
-  let pos = startByte
-  while (pos <= endByte) {
-    const chunkEnd = Math.min(pos + FETCH_CHUNK_BYTES - 1, endByte)
-    parts.push(await fetchByteRange(url, pos, chunkEnd))
-    pos = chunkEnd + 1
+async function streamFull(url: string): Promise<{ chunks: Uint8Array[]; totalBytes: number }> {
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`ファイルの取得に失敗しました (${res.status})`)
+
+  if (!res.body) {
+    // Fallback for environments without ReadableStream
+    const buf = await res.arrayBuffer()
+    return { chunks: [new Uint8Array(buf)], totalBytes: buf.byteLength }
   }
-  return new Blob(parts, { type: 'audio/mpeg' })
+
+  const reader = res.body.getReader()
+  const chunks: Uint8Array[] = []
+  let totalBytes = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    if (value) { chunks.push(value); totalBytes += value.length }
+  }
+  return { chunks, totalBytes }
 }
 
+/**
+ * Extract byte range [startByte, endByte) from an array of sequential chunks.
+ */
+function sliceChunks(
+  chunks: Uint8Array[],
+  startByte: number,
+  endByte: number,  // exclusive
+): BlobPart[] {
+  const parts: BlobPart[] = []
+  let bytePos = 0
+  for (const chunk of chunks) {
+    const chunkEnd = bytePos + chunk.length
+    if (chunkEnd > startByte && bytePos < endByte) {
+      const s = Math.max(0, startByte - bytePos)
+      const e = Math.min(chunk.length, endByte - bytePos)
+      parts.push(chunk.slice(s, e))
+    }
+    bytePos = chunkEnd
+    if (bytePos >= endByte) break
+  }
+  return parts
+}
+
+/**
+ * Download a single clip (start–end) from the audio file.
+ * Streams the full file to get the actual byte count, then extracts the clip range.
+ */
 export async function downloadClip(
   audioUrl: string,
   startTime: number,
@@ -63,59 +71,72 @@ export async function downloadClip(
   duration: number,
   filename: string,
 ): Promise<void> {
-  const fileSize = await getFileSize(audioUrl)
-  const startByte = timeToByte(startTime, duration, fileSize)
-  const endByte   = timeToByte(endTime,   duration, fileSize) - 1
-  const blob = await fetchRangeChunked(audioUrl, startByte, endByte)
-  triggerDownload(blob, filename)
+  const { chunks, totalBytes } = await streamFull(audioUrl)
+  const startByte = Math.round((startTime / duration) * totalBytes)
+  const endByte   = Math.round((endTime   / duration) * totalBytes)
+  const parts = sliceChunks(chunks, startByte, endByte)
+  triggerDownload(new Blob(parts, { type: 'audio/mpeg' }), filename)
 }
 
+/**
+ * Download the full audio file minus any excluded sections.
+ * Streams the full file so that the actual byte count drives all calculations —
+ * Worker audio URLs sometimes return wrong Content-Length in HEAD responses.
+ */
 export async function downloadWithExcludes(
   audioUrl: string,
   sections: Section[],
   duration: number,
   filename: string,
 ): Promise<void> {
-  const fileSize = await getFileSize(audioUrl)
-  if (fileSize <= 0) throw new Error(`ファイルサイズが取得できませんでした (${fileSize})`)
+  const { chunks, totalBytes } = await streamFull(audioUrl)
 
   const excluded = sections
     .filter((s) => s.isExcluded)
     .sort((a, b) => a.startTime - b.startTime)
 
-  // Build list of [startByte, endByte] segments to include (everything except excluded zones)
-  const segments: { startByte: number; endByte: number }[] = []
-
   if (excluded.length === 0) {
-    segments.push({ startByte: 0, endByte: fileSize - 1 })
-  } else {
-    let cursor = 0  // in seconds
-    for (const zone of excluded) {
-      if (zone.startTime > cursor) {
-        segments.push({
-          startByte: timeToByte(cursor,          duration, fileSize),
-          endByte:   timeToByte(zone.startTime,  duration, fileSize) - 1,
-        })
+    // No exclusions — hand all raw chunks straight to the browser
+    triggerDownload(new Blob(chunks, { type: 'audio/mpeg' }), filename)
+    return
+  }
+
+  // Build excluded byte ranges from actual stream size (not from Content-Length)
+  const exclRanges = excluded.map((zone) => ({
+    start: Math.round((zone.startTime / duration) * totalBytes),   // inclusive
+    end:   Math.round((zone.endTime   / duration) * totalBytes),   // exclusive
+  }))
+
+  // Walk chunks and collect non-excluded bytes
+  const blobParts: BlobPart[] = []
+  let bytePos = 0
+
+  for (const chunk of chunks) {
+    const chunkStart = bytePos
+    let pos = 0  // read offset within this chunk
+
+    for (const ex of exclRanges) {
+      // Offset of this excluded range inside the current chunk
+      const exStartLocal = ex.start - chunkStart
+      const exEndLocal   = ex.end   - chunkStart
+
+      // Include bytes from current pos up to the start of the excluded zone
+      const includeEnd = Math.min(Math.max(exStartLocal, pos), chunk.length)
+      if (pos < includeEnd) {
+        blobParts.push(chunk.slice(pos, includeEnd))
       }
-      cursor = Math.max(cursor, zone.endTime)
+      // Advance past the excluded zone (but not beyond the chunk)
+      pos = Math.max(pos, Math.min(Math.max(exEndLocal, 0), chunk.length))
     }
-    if (cursor < duration) {
-      segments.push({
-        startByte: timeToByte(cursor, duration, fileSize),
-        endByte:   fileSize - 1,
-      })
+
+    // Include any remaining bytes after all excluded zones
+    if (pos < chunk.length) {
+      blobParts.push(chunk.slice(pos))
     }
+
+    bytePos += chunk.length
   }
 
-  // Filter out zero-length or inverted ranges (can happen at exact boundaries)
-  const validSegments = segments.filter((s) => s.startByte >= 0 && s.startByte <= s.endByte)
-  if (validSegments.length === 0) throw new Error('全体が除外されています')
-
-  // Fetch each segment in small chunks → collect as Blob parts (avoids large ArrayBuffer in memory)
-  const blobParts: Blob[] = []
-  for (const seg of validSegments) {
-    blobParts.push(await fetchRangeChunked(audioUrl, seg.startByte, seg.endByte))
-  }
-
+  if (blobParts.length === 0) throw new Error('全体が除外されています')
   triggerDownload(new Blob(blobParts, { type: 'audio/mpeg' }), filename)
 }
