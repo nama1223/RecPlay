@@ -14,10 +14,9 @@
  */
 
 import { fetchRange } from './waveformCompute'
-import { WORKER_URL } from '../config'
+import { WORKER_URL, MP3_BITRATE } from '../config'
 
 const DECODE_CHUNK_SECS = 300   // 5-min chunks (Chrome 50M-sample limit)
-const MP3_BITRATE      = 192    // kbps
 
 // Parallel Workers: min(CPU cores - 1, 4).
 const PARALLELISM = Math.min(
