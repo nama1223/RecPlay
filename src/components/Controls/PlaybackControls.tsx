@@ -64,6 +64,11 @@ export function PlaybackControls({
 
     let touchStartY: number | null = null
     let didSwipe = false
+    let intervalId: ReturnType<typeof setInterval> | null = null
+
+    const stopInterval = () => {
+      if (intervalId !== null) { clearInterval(intervalId); intervalId = null }
+    }
 
     const onWheel = (e: WheelEvent) => {
       e.preventDefault()
@@ -73,17 +78,27 @@ export function PlaybackControls({
     const onTouchStart = (e: TouchEvent) => {
       touchStartY = e.touches[0].clientY
       didSwipe = false
+      stopInterval()
     }
 
-    const onTouchEnd = (e: TouchEvent) => {
+    const onTouchMove = (e: TouchEvent) => {
       if (touchStartY === null) return
       const delta = touchStartY - e.changedTouches[0].clientY  // positive = swipe up
-      touchStartY = null
       if (Math.abs(delta) >= 20) {
-        didSwipe = true
-        e.preventDefault()
-        rateChangeRef.current(delta > 0 ? 0.05 : -0.05)
+        e.preventDefault()  // prevent pull-to-refresh and page scroll
+        if (!didSwipe) {
+          // Direction locked at first threshold cross; repeat at 200ms
+          didSwipe = true
+          const sign = delta > 0 ? 1 : -1
+          rateChangeRef.current(sign * 0.05)   // fire immediately
+          intervalId = setInterval(() => rateChangeRef.current(sign * 0.05), 200)
+        }
       }
+    }
+
+    const onTouchEnd = () => {
+      touchStartY = null
+      stopInterval()
     }
 
     const onClick = () => {
@@ -93,12 +108,15 @@ export function PlaybackControls({
 
     btn.addEventListener('wheel',      onWheel,      { passive: false })
     btn.addEventListener('touchstart', onTouchStart, { passive: true  })
-    btn.addEventListener('touchend',   onTouchEnd,   { passive: false })
+    btn.addEventListener('touchmove',  onTouchMove,  { passive: false })
+    btn.addEventListener('touchend',   onTouchEnd,   { passive: true  })
     btn.addEventListener('click',      onClick)
 
     return () => {
+      stopInterval()
       btn.removeEventListener('wheel',      onWheel)
       btn.removeEventListener('touchstart', onTouchStart)
+      btn.removeEventListener('touchmove',  onTouchMove)
       btn.removeEventListener('touchend',   onTouchEnd)
       btn.removeEventListener('click',      onClick)
     }
