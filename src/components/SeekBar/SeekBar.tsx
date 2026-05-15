@@ -21,9 +21,21 @@ const MIN_SEEKBAR_H = 60
 const MAX_SEEKBAR_H = () => Math.round(window.innerHeight * 0.72)
 const DEFAULT_SEEKBAR_H = () => Math.round(Math.min(320, window.innerHeight * 0.38))
 
+const LONG_PRESS_MS = 500   // ms to hold before treating as long-press
+const MOVE_CANCEL_PX = 8    // px movement that cancels long-press
+
 interface DragState {
   sectionId: string
   isStart: boolean
+}
+
+/** Return the narrowest section that contains `time`, or null. */
+function getSectionAtTime(time: number, sections: Section[]): Section | null {
+  const hits = sections.filter((s) => time >= s.startTime && time <= s.endTime)
+  if (hits.length === 0) return null
+  return hits.reduce((best, s) =>
+    (s.endTime - s.startTime) < (best.endTime - best.startTime) ? s : best,
+  )
 }
 
 export function SeekBar({
@@ -47,6 +59,45 @@ export function SeekBar({
   const [seekbarHeight, setSeekbarHeight] = useState(DEFAULT_SEEKBAR_H)
   const resizeDrag = useRef<{ startY: number; startH: number } | null>(null)
 
+  // ── Long-press to select section ──────────────────────────────────────────
+  const longPressTimer   = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const longPressFired   = useRef(false)
+  const longPressPos     = useRef<{ x: number; y: number } | null>(null)
+
+  // Keep always-current refs so the setTimeout callback never sees stale values
+  const sectionsRef            = useRef(sections)
+  const modeRef                = useRef(mode)
+  const onSectionLabelClickRef = useRef(onSectionLabelClick)
+  useEffect(() => { sectionsRef.current = sections },              [sections])
+  useEffect(() => { modeRef.current = mode },                      [mode])
+  useEffect(() => { onSectionLabelClickRef.current = onSectionLabelClick }, [onSectionLabelClick])
+
+  const getTimeFromPointer = useCallback(
+    (clientX: number, clientY: number): number => {
+      if (!containerRef.current) return 0
+      const rect = containerRef.current.getBoundingClientRect()
+      const relY = clientY - rect.top
+      const relX = clientX - rect.left - LABEL_WIDTH
+      const rowIndex = Math.floor(relY / ROW_HEIGHT)
+      const clampedRow = Math.max(0, Math.min(numRows - 1, rowIndex))
+      const trackWidth = rect.width - LABEL_WIDTH
+      const xFraction = trackWidth > 0 ? Math.max(0, Math.min(1, relX / trackWidth)) : 0
+      return Math.max(0, Math.min(duration, clampedRow * secondsPerRow + xFraction * secondsPerRow))
+    },
+    [numRows, secondsPerRow, duration],
+  )
+  const getTimeFromPointerRef = useRef(getTimeFromPointer)
+  useEffect(() => { getTimeFromPointerRef.current = getTimeFromPointer }, [getTimeFromPointer])
+
+  const cancelLongPress = () => {
+    if (longPressTimer.current !== null) {
+      clearTimeout(longPressTimer.current)
+      longPressTimer.current = null
+    }
+    longPressPos.current = null
+  }
+
+  // ── Resize handle ──────────────────────────────────────────────────────────
   const handleResizeStart = (e: React.PointerEvent) => {
     e.preventDefault()
     e.stopPropagation()
@@ -61,7 +112,7 @@ export function SeekBar({
   }
   const handleResizeEnd = () => { resizeDrag.current = null }
 
-  // Draw waveform on canvas
+  // ── Waveform canvas ────────────────────────────────────────────────────────
   useEffect(() => {
     const canvas = canvasRef.current
     const container = containerRef.current
@@ -83,8 +134,6 @@ export function SeekBar({
     ctx.clearRect(0, 0, canvas.width, canvas.height)
 
     const totalBins = waveformSamples.length
-
-    // binPx is fixed across all rows so the last (shorter) row doesn't stretch to fill full width
     const binsPerRow = (secondsPerRow / duration) * totalBins
     const binPx = trackWidth / binsPerRow
 
@@ -107,43 +156,38 @@ export function SeekBar({
     }
   }, [waveformSamples, numRows, secondsPerRow, duration])
 
-  const getTimeFromPointer = useCallback(
-    (clientX: number, clientY: number): number => {
-      if (!containerRef.current) return 0
-      const rect = containerRef.current.getBoundingClientRect()
-      const relY = clientY - rect.top
-      const relX = clientX - rect.left - LABEL_WIDTH
-      const rowIndex = Math.floor(relY / ROW_HEIGHT)
-      const clampedRow = Math.max(0, Math.min(numRows - 1, rowIndex))
-      const trackWidth = rect.width - LABEL_WIDTH
-      const xFraction = trackWidth > 0 ? Math.max(0, Math.min(1, relX / trackWidth)) : 0
-      return Math.max(0, Math.min(duration, clampedRow * secondsPerRow + xFraction * secondsPerRow))
-    },
-    [numRows, secondsPerRow, duration],
-  )
-
+  // ── Pointer handlers ───────────────────────────────────────────────────────
   const handleContainerPointerDown = (e: React.PointerEvent) => {
     if ((e.target as HTMLElement).dataset.flag) return
     pointerDownPos.current = { x: e.clientX, y: e.clientY }
-  }
+    longPressFired.current = false
 
-  const handleContainerPointerUp = (e: React.PointerEvent) => {
-    if (dragging) { setDragging(null); pointerDownPos.current = null; return }
-    if (!pointerDownPos.current) return
-    const dx = e.clientX - pointerDownPos.current.x
-    const dy = e.clientY - pointerDownPos.current.y
-    if (Math.sqrt(dx * dx + dy * dy) < 8) onSeek(getTimeFromPointer(e.clientX, e.clientY))
-    pointerDownPos.current = null
-  }
-
-  // pointercancel fires when the browser takes over (e.g. pull-to-refresh, scroll).
-  // Without this, dragging state stays set and the next touch acts as a phantom drag.
-  const handleContainerPointerCancel = () => {
-    setDragging(null)
-    pointerDownPos.current = null
+    // Start long-press timer only in edit mode
+    if (modeRef.current === 'edit' && onSectionLabelClickRef.current) {
+      longPressPos.current = { x: e.clientX, y: e.clientY }
+      longPressTimer.current = setTimeout(() => {
+        longPressTimer.current = null
+        const pos = longPressPos.current
+        if (!pos) return
+        const time = getTimeFromPointerRef.current(pos.x, pos.y)
+        const section = getSectionAtTime(time, sectionsRef.current)
+        if (section) {
+          longPressFired.current = true
+          onSectionLabelClickRef.current?.(section.id)
+        }
+        longPressPos.current = null
+      }, LONG_PRESS_MS)
+    }
   }
 
   const handlePointerMove = (e: React.PointerEvent) => {
+    // Cancel long-press if the finger/pointer moved too much
+    if (longPressPos.current) {
+      const dx = e.clientX - longPressPos.current.x
+      const dy = e.clientY - longPressPos.current.y
+      if (Math.sqrt(dx * dx + dy * dy) > MOVE_CANCEL_PX) cancelLongPress()
+    }
+
     if (!dragging) return
     const time = getTimeFromPointer(e.clientX, e.clientY)
     const section = sections.find((s) => s.id === dragging.sectionId)
@@ -164,6 +208,29 @@ export function SeekBar({
         onSectionUpdate(dragging.sectionId, { endTime: time })
       }
     }
+  }
+
+  const handleContainerPointerUp = (e: React.PointerEvent) => {
+    cancelLongPress()
+    if (dragging) { setDragging(null); pointerDownPos.current = null; return }
+    if (!pointerDownPos.current) return
+    const dx = e.clientX - pointerDownPos.current.x
+    const dy = e.clientY - pointerDownPos.current.y
+    // Only seek on short tap/click, and only if long-press did NOT fire
+    if (Math.sqrt(dx * dx + dy * dy) < MOVE_CANCEL_PX && !longPressFired.current) {
+      onSeek(getTimeFromPointer(e.clientX, e.clientY))
+    }
+    pointerDownPos.current = null
+    longPressFired.current = false
+  }
+
+  // pointercancel fires when the browser takes over (e.g. pull-to-refresh, scroll).
+  // Without this, dragging state stays set and the next touch acts as a phantom drag.
+  const handleContainerPointerCancel = () => {
+    cancelLongPress()
+    longPressFired.current = false
+    setDragging(null)
+    pointerDownPos.current = null
   }
 
   const handleFlagPointerDown = useCallback(
@@ -187,6 +254,7 @@ export function SeekBar({
           onPointerMove={handlePointerMove}
           onPointerUp={handleContainerPointerUp}
           onPointerCancel={handleContainerPointerCancel}
+          onContextMenu={(e) => { if (mode === 'edit') e.preventDefault() }}
           style={{ touchAction: dragging ? 'none' : 'pan-y', position: 'relative' }}
         >
           {Array.from({ length: numRows }, (_, i) => (
