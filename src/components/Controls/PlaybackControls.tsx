@@ -62,63 +62,53 @@ export function PlaybackControls({
     const btn = playBtnRef.current
     if (!btn) return
 
-    let touchStartY: number | null = null
-    let didSwipe = false
-    let intervalId: ReturnType<typeof setInterval> | null = null
+    let tY = 0
+    let moved = false
+    let lastWheel = 0
 
-    const stopInterval = () => {
-      if (intervalId !== null) { clearInterval(intervalId); intervalId = null }
-    }
-
+    // Wheel: 100ms throttle, one step per event
     const onWheel = (e: WheelEvent) => {
       e.preventDefault()
-      rateChangeRef.current(e.deltaY < 0 ? 0.05 : -0.05)
+      const now = Date.now()
+      if (now - lastWheel < 100) return
+      lastWheel = now
+      rateChangeRef.current(e.deltaY > 0 ? -0.05 : 0.05)
     }
 
+    // passive:false on touchstart prevents pull-to-refresh right from first touch
     const onTouchStart = (e: TouchEvent) => {
-      touchStartY = e.touches[0].clientY
-      didSwipe = false
-      stopInterval()
+      e.preventDefault()
+      tY = e.touches[0].clientY
+      moved = false
     }
 
+    // Fire once per 20 px of travel; reset tY each time → no direction lock, no stocking
     const onTouchMove = (e: TouchEvent) => {
-      if (touchStartY === null) return
-      const delta = touchStartY - e.changedTouches[0].clientY  // positive = swipe up
-      if (Math.abs(delta) >= 20) {
-        e.preventDefault()  // prevent pull-to-refresh and page scroll
-        if (!didSwipe) {
-          // Direction locked at first threshold cross; repeat at 200ms
-          didSwipe = true
-          const sign = delta > 0 ? 1 : -1
-          rateChangeRef.current(sign * 0.05)   // fire immediately
-          intervalId = setInterval(() => rateChangeRef.current(sign * 0.05), 200)
-        }
+      e.preventDefault()
+      const diff = tY - e.touches[0].clientY  // positive = swipe up
+      if (Math.abs(diff) > 20) {
+        moved = true
+        rateChangeRef.current(diff > 0 ? 0.05 : -0.05)
+        tY = e.touches[0].clientY  // consume the 20 px, reset reference
       }
     }
 
-    const onTouchEnd = () => {
-      touchStartY = null
-      stopInterval()
-    }
-
-    const onClick = () => {
-      if (didSwipe) { didSwipe = false; return }
-      toggleRef.current()
+    // preventDefault suppresses synthesized click; tap (no move) toggles play
+    const onTouchEnd = (e: TouchEvent) => {
+      e.preventDefault()
+      if (!moved) toggleRef.current()
     }
 
     btn.addEventListener('wheel',      onWheel,      { passive: false })
-    btn.addEventListener('touchstart', onTouchStart, { passive: true  })
+    btn.addEventListener('touchstart', onTouchStart, { passive: false })
     btn.addEventListener('touchmove',  onTouchMove,  { passive: false })
-    btn.addEventListener('touchend',   onTouchEnd,   { passive: true  })
-    btn.addEventListener('click',      onClick)
+    btn.addEventListener('touchend',   onTouchEnd,   { passive: false })
 
     return () => {
-      stopInterval()
       btn.removeEventListener('wheel',      onWheel)
       btn.removeEventListener('touchstart', onTouchStart)
       btn.removeEventListener('touchmove',  onTouchMove)
       btn.removeEventListener('touchend',   onTouchEnd)
-      btn.removeEventListener('click',      onClick)
     }
   }, [])  // empty deps — uses refs for callbacks
 
