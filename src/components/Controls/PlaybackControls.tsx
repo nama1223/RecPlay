@@ -93,22 +93,27 @@ export function PlaybackControls({
       }
     }
 
-    // preventDefault suppresses synthesized click; tap (no move) toggles play
+    // preventDefault suppresses synthesized click on mobile; tap (no move) toggles play
     const onTouchEnd = (e: TouchEvent) => {
       e.preventDefault()
       if (!moved) toggleRef.current()
     }
 
+    // Mouse click (desktop) — touchend+preventDefault suppresses this on mobile
+    const onClick = () => { toggleRef.current() }
+
     btn.addEventListener('wheel',      onWheel,      { passive: false })
     btn.addEventListener('touchstart', onTouchStart, { passive: false })
     btn.addEventListener('touchmove',  onTouchMove,  { passive: false })
     btn.addEventListener('touchend',   onTouchEnd,   { passive: false })
+    btn.addEventListener('click',      onClick)
 
     return () => {
       btn.removeEventListener('wheel',      onWheel)
       btn.removeEventListener('touchstart', onTouchStart)
       btn.removeEventListener('touchmove',  onTouchMove)
       btn.removeEventListener('touchend',   onTouchEnd)
+      btn.removeEventListener('click',      onClick)
     }
   }, [])  // empty deps — uses refs for callbacks
 
