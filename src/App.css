@@ -256,7 +256,7 @@
   justify-content: flex-end;
   padding-right: 3px;
   font-size: 8px;
-  color: #443366;
+  color: #9988cc;
   font-variant-numeric: tabular-nums;
   background: #161630;
   border-right: 1px solid #2a1e52;
@@ -705,6 +705,23 @@
   border-top: 1px solid #2a1e52;
 }
 
+.normalize-all-btn {
+  width: calc(100% - 24px);
+  margin: 8px 12px 12px;
+  padding: 10px;
+  background: #1a2744;
+  color: #7eb8f8;
+  border: 1px solid #2a4080;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  display: block;
+}
+.normalize-all-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
 /* ── Flag Editor ── */
 .flag-editor {
   background: #0e0e24;
@@ -1075,10 +1092,11 @@
   padding: 0 4px 0 0;
   font-size: inherit;
   cursor: pointer;
-  opacity: 0.7;
+  color: #d4b8ff;
+  opacity: 0.9;
   transition: opacity 0.15s;
 }
-.waveform-gen-btn:not(:disabled):hover { opacity: 1; }
+.waveform-gen-btn:not(:disabled):hover { opacity: 1; color: #e8d0ff; }
 .waveform-gen-btn:disabled { cursor: default; opacity: 0.4; }
 .waveform-gen-btn.generating { animation: pulse 1s infinite; }
 @keyframes pulse { 0%,100% { opacity: 0.5; } 50% { opacity: 1; } }
@@ -1323,7 +1341,7 @@
 .sort-btn.active { background: #3a2a7a; border-color: #7755cc; color: #ccaaff; }
 .sort-btn:hover { background: #2a2060; }
 
-/* ── File item row with rename button ── */
+/* ── File item row with action buttons ── */
 .file-item-row {
   display: flex;
   align-items: stretch;
@@ -1331,17 +1349,32 @@
 }
 .file-item-row .file-item-btn { flex: 1; }
 
-.file-rename-icon {
+/* アクションボタングループ（✏️ ⧉ 🗑） */
+.file-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.file-item-row:hover .file-item-actions { opacity: 1; }
+
+.file-action-icon {
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 16px;
-  padding: 8px 6px;
-  opacity: 0.4;
-  transition: opacity 0.15s;
-  flex-shrink: 0;
+  font-size: 15px;
+  padding: 6px 5px;
+  line-height: 1;
+  border-radius: 5px;
+  transition: background 0.1s;
+  color: inherit;
 }
-.file-item-row:hover .file-rename-icon { opacity: 1; }
+.file-action-icon:hover:not(:disabled) { background: rgba(255,255,255,0.1); }
+.file-action-icon:disabled { opacity: 0.4; cursor: default; }
+.file-action-icon.copy-btn { font-size: 14px; color: #88aaee; }
+.file-action-icon.delete-btn { color: #cc6677; }
 
 .file-rename-row {
   display: flex;

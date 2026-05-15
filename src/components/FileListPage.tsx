@@ -25,6 +25,26 @@ function fmt(bytes: number) {
     : `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
+// ── LocalStorage: アップロードしたファイルのキーを記憶 ──────────────────────
+// 同一ブラウザ/デバイスからアップロードしたファイルにだけ削除ボタンを表示するため。
+// デバイスをまたぐ場合は管理パネル (Admin) から削除できます。
+const LS_KEY = 'recplay-own-keys'
+
+function getOwnKeys(): string[] {
+  try { return JSON.parse(localStorage.getItem(LS_KEY) ?? '[]') } catch { return [] }
+}
+function addOwnKey(key: string): void {
+  const keys = getOwnKeys()
+  if (!keys.includes(key)) localStorage.setItem(LS_KEY, JSON.stringify([...keys, key]))
+}
+function removeOwnKey(key: string): void {
+  localStorage.setItem(LS_KEY, JSON.stringify(getOwnKeys().filter((k) => k !== key)))
+}
+function replaceOwnKey(oldKey: string, newKey: string): void {
+  const keys = getOwnKeys().map((k) => (k === oldKey ? newKey : k))
+  localStorage.setItem(LS_KEY, JSON.stringify(keys))
+}
+
 export function FileListPage({ org, onFileSelect, onLogout }: Props) {
   const [files, setFiles] = useState<AudioFile[]>([])
   const [loading, setLoading] = useState(true)
@@ -39,6 +59,15 @@ export function FileListPage({ org, onFileSelect, onLogout }: Props) {
   const [renamingKey, setRenamingKey] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [renaming, setRenaming] = useState(false)
+
+  // Copy state
+  const [copyingKey, setCopyingKey] = useState<string | null>(null)
+
+  // Delete state
+  const [deletingKey, setDeletingKey] = useState<string | null>(null)
+
+  // Own keys from LocalStorage
+  const [ownKeys, setOwnKeys] = useState<string[]>(() => getOwnKeys())
 
   // Upload state
   const uploadInputRef = useRef<HTMLInputElement>(null)
@@ -110,6 +139,12 @@ export function FileListPage({ org, onFileSelect, onLogout }: Props) {
         body: JSON.stringify({ key: renamingKey, newName: renameValue.trim() }),
       })
       if (!res.ok) throw new Error(`${res.status}`)
+      const { newKey } = await res.json() as { newKey: string }
+      // キーが変わった場合は LocalStorage も更新
+      if (newKey && newKey !== renamingKey) {
+        replaceOwnKey(renamingKey, newKey)
+        setOwnKeys(getOwnKeys())
+      }
       setRenamingKey(null)
       load()
     } catch (e) {
@@ -122,6 +157,50 @@ export function FileListPage({ org, onFileSelect, onLogout }: Props) {
   const handleRenameKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') commitRename()
     if (e.key === 'Escape') setRenamingKey(null)
+  }
+
+  // Copy handler
+  const handleCopy = async (e: React.MouseEvent, file: AudioFile) => {
+    e.stopPropagation()
+    if (copyingKey) return
+    setCopyingKey(file.key)
+    try {
+      const res = await fetch(`${WORKER_URL}/files/copy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: file.key }),
+      })
+      if (!res.ok) throw new Error(`${res.status}`)
+      const { newKey } = await res.json() as { newKey: string }
+      // 複製したファイルも自分のものとして記録
+      addOwnKey(newKey)
+      setOwnKeys(getOwnKeys())
+      load()
+    } catch (e) {
+      alert(`複製に失敗しました: ${e}`)
+    } finally {
+      setCopyingKey(null)
+    }
+  }
+
+  // Delete handler
+  const handleDelete = async (e: React.MouseEvent, file: AudioFile) => {
+    e.stopPropagation()
+    if (!confirm(`「${file.name}」を削除しますか？\n\nこの操作は元に戻せません。`)) return
+    setDeletingKey(file.key)
+    try {
+      const res = await fetch(`${WORKER_URL}/files?key=${encodeURIComponent(file.key)}`, {
+        method: 'DELETE',
+      })
+      if (!res.ok) throw new Error(`${res.status}`)
+      removeOwnKey(file.key)
+      setOwnKeys(getOwnKeys())
+      load()
+    } catch (e) {
+      alert(`削除に失敗しました: ${e}`)
+    } finally {
+      setDeletingKey(null)
+    }
   }
 
   // Upload handlers
@@ -140,7 +219,10 @@ export function FileListPage({ org, onFileSelect, onLogout }: Props) {
     setUploadError(null)
     setProgress({ loaded: 0, total: file.size, percent: 0 })
     try {
-      await uploadToR2(file, (p) => setProgress(p), org.id)
+      const key = await uploadToR2(file, (p) => setProgress(p), org.id)
+      // アップロード完了 → このデバイスでアップロードしたキーとして保存
+      addOwnKey(key)
+      setOwnKeys(getOwnKeys())
       setUploadDone(true)
       setUploadFile(null)
       load()
@@ -283,34 +365,59 @@ export function FileListPage({ org, onFileSelect, onLogout }: Props) {
         )}
 
         <div className="file-items">
-          {sortedFiles.map((f) => (
-            <div key={f.key} className="file-item-row">
-              {renamingKey === f.key ? (
-                <div className="file-rename-row">
-                  <input
-                    className="file-rename-input"
-                    value={renameValue}
-                    onChange={(e) => setRenameValue(e.target.value)}
-                    onKeyDown={handleRenameKeyDown}
-                    autoFocus
-                    disabled={renaming}
-                  />
-                  <button className="rename-ok-btn" onClick={commitRename} disabled={renaming}>✓</button>
-                  <button className="rename-cancel-btn" onClick={() => setRenamingKey(null)} disabled={renaming}>✕</button>
-                </div>
-              ) : (
-                <button className="file-item-btn" onClick={() => handleSelect(f)}>
-                  <span className="file-item-name">🎵 {f.name}</span>
-                  <span className="file-item-meta">
-                    {fmt(f.size)} · {new Date(f.uploadedAt).toLocaleDateString('ja-JP')}
-                  </span>
-                </button>
-              )}
-              {renamingKey !== f.key && (
-                <button className="file-rename-icon" onClick={(e) => startRename(e, f)} title="名前を変更">✏️</button>
-              )}
-            </div>
-          ))}
+          {sortedFiles.map((f) => {
+            const isOwn = ownKeys.includes(f.key)
+            const isCopying = copyingKey === f.key
+            const isDeleting = deletingKey === f.key
+            return (
+              <div key={f.key} className="file-item-row">
+                {renamingKey === f.key ? (
+                  <div className="file-rename-row">
+                    <input
+                      className="file-rename-input"
+                      value={renameValue}
+                      onChange={(e) => setRenameValue(e.target.value)}
+                      onKeyDown={handleRenameKeyDown}
+                      autoFocus
+                      disabled={renaming}
+                    />
+                    <button className="rename-ok-btn" onClick={commitRename} disabled={renaming}>✓</button>
+                    <button className="rename-cancel-btn" onClick={() => setRenamingKey(null)} disabled={renaming}>✕</button>
+                  </div>
+                ) : (
+                  <button className="file-item-btn" onClick={() => handleSelect(f)}>
+                    <span className="file-item-name">🎵 {f.name}</span>
+                    <span className="file-item-meta">
+                      {fmt(f.size)} · {new Date(f.uploadedAt).toLocaleDateString('ja-JP')}
+                    </span>
+                  </button>
+                )}
+                {renamingKey !== f.key && (
+                  <div className="file-item-actions">
+                    <button
+                      className="file-action-icon"
+                      onClick={(e) => startRename(e, f)}
+                      title="名前を変更"
+                    >✏️</button>
+                    <button
+                      className="file-action-icon copy-btn"
+                      onClick={(e) => handleCopy(e, f)}
+                      disabled={isCopying || !!copyingKey}
+                      title="複製（区間設定も含めてコピー）"
+                    >{isCopying ? '⏳' : '⧉'}</button>
+                    {isOwn && (
+                      <button
+                        className="file-action-icon delete-btn"
+                        onClick={(e) => handleDelete(e, f)}
+                        disabled={isDeleting}
+                        title="削除"
+                      >{isDeleting ? '⏳' : '🗑'}</button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
 
         <button className="secondary-btn" onClick={load} style={{ marginTop: 16 }}>

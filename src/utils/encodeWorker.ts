@@ -10,11 +10,10 @@
  *   processF32  { type:'processF32',
  *                 leftF32Buf:  ArrayBuffer,        — Float32 PCM left  (transferred)
  *                 rightF32Buf: ArrayBuffer | null, — Float32 PCM right (transferred, or null)
- *                 sampleOffset:    number,   — absolute sample index of first sample
- *                 gainConst:       number,   — gain outside section (or whole-file gain)
- *                 sectionGain:     number | null, — null = constant gain for whole file
- *                 sectionStartSamp: number,
- *                 sectionEndSamp:   number }
+ *                 sampleOffset: number,  — absolute sample index of first sample
+ *                 gainConst:    number,  — gain for samples outside any section
+ *                 sectionGains: Array<{gain:number, startSamp:number, endSamp:number}> | null
+ *                               — per-section gains; null = constant gainConst for whole chunk }
  *               → { type:'processedF32', dataBuf: ArrayBuffer }  (transferred MP3 bytes)
  *
  *   encode      { type:'encode', leftBuf: ArrayBuffer, rightBuf: ArrayBuffer|null }  (legacy Int16)
@@ -68,19 +67,34 @@ self.onmessage = ({ data: msg }: MessageEvent) => {
   if (msg.type === 'processF32') {
     const left  = new Float32Array(msg.leftF32Buf)
     const right = msg.rightF32Buf != null ? new Float32Array(msg.rightF32Buf) : null
-    const { sampleOffset, gainConst, sectionGain, sectionStartSamp, sectionEndSamp } = msg
+    const { sampleOffset, gainConst } = msg
+    const sectionGains: Array<{ gain: number; startSamp: number; endSamp: number }> | null
+      = msg.sectionGains ?? null
 
     const n = left.length
     const leftI16  = new Int16Array(n)
     const rightI16 = right ? new Int16Array(n) : null
-    const hasSectionGain = sectionGain != null
 
-    for (let i = 0; i < n; i++) {
-      const absIdx = sampleOffset + i
-      const g = hasSectionGain && absIdx >= sectionStartSamp && absIdx <= sectionEndSamp
-        ? (sectionGain as number) : (gainConst as number)
-      leftI16[i] = f32ToI16(left[i] * g)
-      if (rightI16 && right) rightI16[i] = f32ToI16(right[i] * g)
+    if (sectionGains && sectionGains.length > 0) {
+      // Multi-section path: sections are sorted ascending by startSamp.
+      // Advance a pointer as absIdx increases — O(n + sections) instead of O(n * sections).
+      const sorted = sectionGains.slice().sort((a, b) => a.startSamp - b.startSamp)
+      let si = 0
+      for (let i = 0; i < n; i++) {
+        const absIdx = sampleOffset + i
+        // Advance past sections that have ended before this sample
+        while (si < sorted.length && sorted[si].endSamp < absIdx) si++
+        const sg = si < sorted.length && absIdx >= sorted[si].startSamp ? sorted[si] : null
+        const g = sg ? sg.gain : gainConst
+        leftI16[i] = f32ToI16(left[i] * g)
+        if (rightI16 && right) rightI16[i] = f32ToI16(right[i] * g)
+      }
+    } else {
+      // Constant gain across the whole chunk
+      for (let i = 0; i < n; i++) {
+        leftI16[i] = f32ToI16(left[i] * gainConst)
+        if (rightI16 && right) rightI16[i] = f32ToI16(right[i] * gainConst)
+      }
     }
 
     const out = lamejsEncode(leftI16, rightI16)

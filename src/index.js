@@ -298,6 +298,53 @@ export default {
         return json({ files });
       }
 
+      // POST /files/copy — ファイルを複製（音声 + sections + waveform）
+      if (method === 'POST' && pathname === '/files/copy') {
+        const { key } = await request.json();
+        if (!key) return json({ error: 'key required' }, 400);
+        const orgId = key.split('/')[0];
+        const filename = key.slice(orgId.length + 1);
+        const baseName = filename.replace(/^\d+_/, '');  // タイムスタンプ prefix を除去
+        const dotIdx = baseName.lastIndexOf('.');
+        const nameWithoutExt = dotIdx >= 0 ? baseName.slice(0, dotIdx) : baseName;
+        const ext = dotIdx >= 0 ? baseName.slice(dotIdx) : '';
+        const newBaseName = `${nameWithoutExt}のコピー${ext}`;
+        const newTimestamp = Date.now();
+        const safeName = newBaseName.replace(/[/\\#%?&=+<>"'\x00-\x1f]/g, '_');
+        const newKey = `${orgId}/${newTimestamp}_${safeName}`;
+        // 音声ファイルをコピー
+        const obj = await env.recplay_audio.get(key);
+        if (!obj) return json({ error: 'not found' }, 404);
+        await env.recplay_audio.put(newKey, obj.body, { httpMetadata: obj.httpMetadata });
+        // sections をコピー（存在する場合）
+        const sectObj = await env.recplay_audio.get(`sections/${key}.json`);
+        if (sectObj) {
+          await env.recplay_audio.put(`sections/${newKey}.json`, sectObj.body, {
+            httpMetadata: { contentType: 'application/json' },
+          });
+        }
+        // waveform をコピー（存在する場合）
+        const waveObj = await env.recplay_audio.get(`waveforms/${key}.json`);
+        if (waveObj) {
+          await env.recplay_audio.put(`waveforms/${newKey}.json`, waveObj.body, {
+            httpMetadata: { contentType: 'application/json' },
+          });
+        }
+        return json({ ok: true, newKey });
+      }
+
+      // DELETE /files?key={key} — ファイル削除（音声 + sections + waveform）
+      if (method === 'DELETE' && pathname === '/files') {
+        const key = url.searchParams.get('key');
+        if (!key) return json({ error: 'key required' }, 400);
+        await Promise.all([
+          env.recplay_audio.delete(key),
+          env.recplay_audio.delete(`sections/${key}.json`),
+          env.recplay_audio.delete(`waveforms/${key}.json`),
+        ]);
+        return json({ ok: true });
+      }
+
       // PATCH /files — ファイル名変更（R2内でコピー→削除）
       if (method === 'PATCH' && pathname === '/files') {
         const { key, newName } = await request.json();

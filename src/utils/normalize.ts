@@ -16,6 +16,7 @@
 
 import { fetchRange } from './waveformCompute'
 import { WORKER_URL, MP3_BITRATE } from '../config'
+import type { Section } from '../types'
 
 const DECODE_CHUNK_SECS = 300   // 5-min chunks (Chrome 50M-sample limit)
 
@@ -138,21 +139,19 @@ class EncodeWorker {
   /**
    * Send decoded Float32 PCM to Worker (zero-copy transfer).
    * Worker applies gain, converts f32→i16, and lamejs-encodes.
+   * sectionGains: per-section gains; null = constant gainConst for entire chunk.
    */
   async processF32(
     leftF32Buf: ArrayBuffer,
     rightF32Buf: ArrayBuffer | null,
     sampleOffset: number,
     gainConst: number,
-    sectionGain: number | null,
-    sectionStartSamp: number,
-    sectionEndSamp: number,
+    sectionGains: Array<{ gain: number; startSamp: number; endSamp: number }> | null,
   ): Promise<Uint8Array> {
     const transfer: Transferable[] = [leftF32Buf]
     if (rightF32Buf) transfer.push(rightF32Buf)
     const { dataBuf } = await this.rpc<{ dataBuf: ArrayBuffer }>(
-      { type: 'processF32', leftF32Buf, rightF32Buf, sampleOffset,
-        gainConst, sectionGain, sectionStartSamp, sectionEndSamp },
+      { type: 'processF32', leftF32Buf, rightF32Buf, sampleOffset, gainConst, sectionGains },
       transfer,
     )
     return new Uint8Array(dataBuf)
@@ -220,9 +219,7 @@ async function encodeSegment(
   channels: number,
   samplesPerChunk: number,
   gainConst: number,
-  sectionGain: number | null,
-  sectionStartSamp: number,
-  sectionEndSamp: number,
+  sectionGains: Array<{ gain: number; startSamp: number; endSamp: number }> | null,
   encodeAs: number,
   onProgress?: (chunksCompleted: number) => void,
 ): Promise<Uint8Array[]> {
@@ -271,7 +268,7 @@ async function encodeSegment(
         // Transfer to Worker: gain + f32→i16 + encode all happen in Worker thread
         const encoded = await ew.processF32(
           leftF32Buf, rightF32Buf, sampleOffset,
-          gainConst, sectionGain, sectionStartSamp, sectionEndSamp,
+          gainConst, sectionGains,
         )
         if (encoded.length > 0) parts.push(encoded)
       }
@@ -301,9 +298,7 @@ async function encodeFullFile(
   sampleRate: number,
   channels: number,
   gainConst: number,
-  sectionGain: number | null,
-  sectionStartSamp: number,
-  sectionEndSamp: number,
+  sectionGains: Array<{ gain: number; startSamp: number; endSamp: number }> | null,
   encodeAs: number,
   onProgress?: (pct: number) => void,
 ): Promise<Uint8Array[]> {
@@ -321,7 +316,7 @@ async function encodeFullFile(
     segTotal.push(ce - cs)
     return encodeSegment(
       url, fileSize, cs, ce, chunkBytes, sampleRate, channels,
-      samplesPerChunk, gainConst, sectionGain, sectionStartSamp, sectionEndSamp,
+      samplesPerChunk, gainConst, sectionGains,
       encodeAs,
       (done) => {
         segDone[wi] = done
@@ -358,10 +353,10 @@ export async function normalizeFile(
   // Probe true sample rate from MP3 frame header (avoids AudioContext resampling)
   const { sampleRate, channels } = await probeSrcFormat(src, fileSize)
 
-  // Constant gain across entire file (sectionGain = null); encode at source sample rate
+  // Constant gain across entire file (no section gains); encode at source sample rate
   const parts = await encodeFullFile(
     src, fileSize, chunkBytes, sampleRate, channels,
-    gain, null, 0, 0, sampleRate,
+    gain, null, sampleRate,
     (pct) => onProgress(pct, 'encode'),
   )
 
@@ -404,13 +399,80 @@ export async function normalizeSection(
   const sectionEndSamp   = Math.round(endTime   * sampleRate)
 
   // Pass 2: encode full file in parallel with selective gain
-  // gainConst = 1.0 (outside section), sectionGain = gain (inside section)
+  // gainConst = 1.0 (outside section), sectionGains contains the one section's gain
   const parts = await encodeFullFile(
     src, fileSize, chunkBytes, sampleRate, channels,
-    1.0, gain, sectionStartSamp, sectionEndSamp, sampleRate,
+    1.0, [{ gain, startSamp: sectionStartSamp, endSamp: sectionEndSamp }], sampleRate,
     (pct) => onProgress(pct, 'encode'),
   )
 
+  onProgress(0, 'upload')
+  await uploadToR2(buildMp3Blob(parts), fileKey)
+  onProgress(100, 'upload')
+}
+
+/**
+ * Normalize all non-excluded sections in a single encode pass.
+ *
+ * Phase 1 (scan): Scan peak of each play section in parallel.
+ * Phase 2 (encode): Re-encode the full file once, applying per-section gains.
+ * Phase 3 (upload): Upload the result.
+ *
+ * This is far faster and introduces less generational loss than calling
+ * normalizeSection() once per section.
+ */
+export async function normalizeAllSections(
+  src: string,
+  duration: number,
+  fileKey: string,
+  sections: Section[],
+  onProgress: (pct: number, phase: NormPhase) => void,
+): Promise<void> {
+  const playSections = sections.filter((s) => !s.isExcluded)
+  if (playSections.length === 0) throw new Error('再生区間がありません')
+
+  const fileSize = await getFileSize(src)
+  const { sampleRate, channels } = await probeSrcFormat(src, fileSize)
+  const chunkBytes = Math.ceil((DECODE_CHUNK_SECS / duration) * fileSize)
+
+  // Phase 1: scan each section's peak in parallel
+  const scanPcts = new Array(playSections.length).fill(0)
+  const peaks = await Promise.all(
+    playSections.map(async (section, idx) => {
+      const sectionDur = section.endTime - section.startTime
+      if (sectionDur <= 0) return 0
+      const bStart = Math.floor((section.startTime / duration) * fileSize)
+      const bEnd   = Math.min(Math.ceil((section.endTime / duration) * fileSize) - 1, fileSize - 1)
+      const scanChunk = Math.ceil(
+        (Math.min(DECODE_CHUNK_SECS, sectionDur) / sectionDur) * (bEnd - bStart + 1),
+      )
+      const { peak } = await scanPeak(src, bStart, bEnd, scanChunk, sampleRate, (pct) => {
+        scanPcts[idx] = pct
+        const avg = scanPcts.reduce((a, b) => a + b, 0) / scanPcts.length
+        onProgress(Math.round(avg), 'scan')
+      })
+      return peak
+    }),
+  )
+
+  // Phase 2: build per-section gain list and encode full file once
+  const sectionGains = playSections.map((section, idx) => {
+    const peak = peaks[idx]
+    const gain = peak > 0 ? Math.min(TARGET_LEVEL / peak, 20) : 1.0
+    return {
+      gain,
+      startSamp: Math.round(section.startTime * sampleRate),
+      endSamp:   Math.round(section.endTime   * sampleRate),
+    }
+  })
+
+  const parts = await encodeFullFile(
+    src, fileSize, chunkBytes, sampleRate, channels,
+    1.0, sectionGains, sampleRate,
+    (pct) => onProgress(pct, 'encode'),
+  )
+
+  // Phase 3: upload
   onProgress(0, 'upload')
   await uploadToR2(buildMp3Blob(parts), fileKey)
   onProgress(100, 'upload')
@@ -445,7 +507,7 @@ export async function restoreSampleRate44to48(
     src, fileSize, chunkBytes,
     44100,  // sampleRate: AudioContext rate = source file's claimed rate (no resample)
     2,      // channels: assume stereo
-    1.0, null, 0, 0,
+    1.0, null,
     48000,  // encodeAs: tag the output MP3 as 48 kHz
     (pct) => onProgress(pct, 'encode'),
   )

@@ -7,7 +7,7 @@ import { useWaveform } from './hooks/useWaveform'
 import { useSectionSync } from './hooks/useSectionSync'
 import { OrgInfo, getStoredOrgs, storeOrg } from './hooks/useOrgAuth'
 import { computeWaveform, serializeWaveform, getWaveformResumeInfo, clearWaveformResume } from './utils/waveformCompute'
-import { normalizeFile, NormPhase, NORMALIZE_TARGET_LEVEL, restoreSampleRate44to48 } from './utils/normalize'
+import { normalizeFile, NormPhase, NORMALIZE_TARGET_LEVEL, restoreSampleRate44to48, normalizeAllSections } from './utils/normalize'
 import { SeekBar } from './components/SeekBar/SeekBar'
 import { PlaybackControls } from './components/Controls/PlaybackControls'
 import { SectionList } from './components/Sections/SectionList'
@@ -73,6 +73,7 @@ export default function App() {
   const [normalizing, setNormalizing] = useState(false)
   const [normPct, setNormPct] = useState(0)
   const [normPhase, setNormPhase] = useState<NormPhase>('encode')
+  const [normAllActive, setNormAllActive] = useState(false)
   const onRemoteUpdate = useCallback((secs: Section[]) => importSections(secs), [importSections])
   const { lastSyncedAt, isDirty } = useSectionSync(fileKey, fileLoadCounter, mode, sections, onRemoteUpdate)
 
@@ -325,12 +326,48 @@ export default function App() {
   const handleSectionNormalized = useCallback(() => {
     setWaveformPeakLevel(NORMALIZE_TARGET_LEVEL)
     saveWaveformPeakToWorker(NORMALIZE_TARGET_LEVEL)
+    // Clear stale waveform — amplitude changed; user can regenerate with 🎵
+    setWaveformSamples(null)
     // Reload audio (cache-bust)
     if (src) {
       const bust = src.includes('?') ? `${src}&_r=${Date.now()}` : `${src}?_r=${Date.now()}`
       loadUrl(bust)
     }
-  }, [saveWaveformPeakToWorker, src, loadUrl])
+  }, [saveWaveformPeakToWorker, src, loadUrl, setWaveformSamples])
+
+  /** Called from SectionList's "normalize all play sections" button. */
+  const handleNormalizeAll = useCallback(async () => {
+    if (!src || !fileKey || duration <= 0) return
+    const playSections = sections.filter((s) => !s.isExcluded)
+    if (playSections.length === 0) { alert('再生区間がありません'); return }
+    if (!confirm(
+      `全ての再生区間（${playSections.length} 件）のピークを個別に検出し、\n` +
+      `1回のエンコードでまとめてノーマライズします。\n\n続けますか？`
+    )) return
+
+    setNormAllActive(true)
+    setNormPct(0)
+    setNormPhase('scan')
+    setNormalizing(true)
+    try {
+      await normalizeAllSections(src, duration, fileKey, sections, (pct, phase) => {
+        setNormPct(pct)
+        setNormPhase(phase)
+      })
+      setWaveformPeakLevel(NORMALIZE_TARGET_LEVEL)
+      await saveWaveformPeakToWorker(NORMALIZE_TARGET_LEVEL)
+      // Clear stale waveform — amplitudes changed; user can regenerate with 🎵
+      setWaveformSamples(null)
+      // Reload audio (cache-bust)
+      const bust = src.includes('?') ? `${src}&_r=${Date.now()}` : `${src}?_r=${Date.now()}`
+      loadUrl(bust)
+    } catch (e) {
+      alert(`ノーマライズに失敗しました: ${e}`)
+    } finally {
+      setNormAllActive(false)
+      setNormalizing(false)
+    }
+  }, [src, fileKey, duration, sections, saveWaveformPeakToWorker, setWaveformSamples, loadUrl])
 
   // Close wave menu when clicking outside
   useEffect(() => {
@@ -520,6 +557,8 @@ export default function App() {
                   redoCount={redoCount}
                   onReorder={reorderSections}
                   onSectionNormalized={handleSectionNormalized}
+                  onNormalizeAll={fileKey ? handleNormalizeAll : undefined}
+                  normalizeAllActive={normAllActive}
                 />
               )}
 
