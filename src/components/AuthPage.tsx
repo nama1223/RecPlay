@@ -63,7 +63,7 @@ export function AuthPage({ onAuth, onAdmin }: Props) {
       <div className="auth-card">
         <div className="file-loader-logo">🎵</div>
         <div className="file-loader-title">RecPlay</div>
-        <p className="file-loader-desc">練習録音の共有・編集プレーヤー</p>
+        <p className="file-loader-desc">みんなで編集！録音プレーヤー</p>
 
         {/* ログイン済み団体 */}
         {storedOrgs.length > 0 && (

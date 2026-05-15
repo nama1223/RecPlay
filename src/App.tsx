@@ -388,9 +388,21 @@ export default function App() {
                   onClick={fileKey && !waveformGenerating && !normalizing ? () => setWaveMenuOpen((v) => !v) : undefined}
                   title={fileKey ? '波形・ノーマライズメニュー' : '（ファイル未選択）'}
                   disabled={!fileKey || waveformGenerating || normalizing}
-                >🎵</button>
+                >≡</button>
                 {waveMenuOpen && (
                   <div className="wave-menu">
+                    {fileKey && (
+                      <button
+                        className="wave-menu-item"
+                        onClick={() => {
+                          const url = `${location.origin}${location.pathname}?url=${encodeURIComponent(buildWorkerAudioUrl(fileKey))}`
+                          navigator.clipboard.writeText(url).then(() => alert('URLをコピーしました'))
+                          setWaveMenuOpen(false)
+                        }}
+                      >
+                        🔗 ファイルURL共有
+                      </button>
+                    )}
                     <button className="wave-menu-item" onClick={handleGenerateWaveform}>
                       📊 波形生成{waveformStored ? '（再生成）' : ''}
                     </button>
@@ -412,7 +424,10 @@ export default function App() {
                   </div>
                 )}
               </div>
-              {org ? org.name : 'RecPlay'}
+              {org
+                ? <button className="org-name-link" onClick={() => setScreen('files')} title="ファイル一覧へ">{org.name}</button>
+                : 'RecPlay'
+              }
               {waveformGenerating && <span className="waveform-gen-status"> 波形生成中... {waveformGenPct}%</span>}
               {normalizing && (
                 <span className="waveform-gen-status">
@@ -425,27 +440,9 @@ export default function App() {
 
           {fileLoaded && (
             <div className="player">
+              {/* file name (left) + time display (right) */}
               <div className="file-bar">
                 <span className="file-name" title={fileName}>{fileName}</span>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  {fileKey && (
-                    <button
-                      className="change-btn"
-                      title="このファイルのURLをコピー"
-                      onClick={() => {
-                        const url = `${location.origin}${location.pathname}?url=${encodeURIComponent(buildWorkerAudioUrl(fileKey))}`
-                        navigator.clipboard.writeText(url).then(() => alert('URLをコピーしました'))
-                      }}
-                    >共有</button>
-                  )}
-                  {org && (
-                    <button className="change-btn" onClick={() => setScreen('files')}>ファイル一覧</button>
-                  )}
-                </div>
-              </div>
-
-              {/* time + zoom on same row */}
-              <div className="time-zoom-bar">
                 <div className="time-display">
                   <span className="current-time">{formatTime(currentTime)}</span>
                   <span className="time-sep">/</span>
@@ -459,11 +456,13 @@ export default function App() {
                     </span>
                   )}
                 </div>
-                <div className="zoom-controls-inline">
-                  <button className="zoom-btn-sm" onClick={zoomOut} disabled={zoomIndex === ZOOM_LEVELS.length - 1} title="ズームアウト">−</button>
-                  <span className="zoom-label-sm">{secondsPerRow >= 60 ? `${secondsPerRow / 60}分/段` : `${secondsPerRow}秒/段`}</span>
-                  <button className="zoom-btn-sm" onClick={zoomIn} disabled={zoomIndex === 0} title="ズームイン">＋</button>
-                </div>
+              </div>
+
+              {/* zoom controls — centered, own row */}
+              <div className="zoom-row">
+                <button className="zoom-btn-sm" onClick={zoomOut} disabled={zoomIndex === ZOOM_LEVELS.length - 1} title="ズームアウト">−</button>
+                <span className="zoom-label-sm">{secondsPerRow >= 60 ? `${secondsPerRow / 60}分/段` : `${secondsPerRow}秒/段`}</span>
+                <button className="zoom-btn-sm" onClick={zoomIn} disabled={zoomIndex === 0} title="ズームイン">＋</button>
               </div>
 
               <SeekBar

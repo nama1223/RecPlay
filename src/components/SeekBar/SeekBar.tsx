@@ -134,6 +134,13 @@ export function SeekBar({
     pointerDownPos.current = null
   }
 
+  // pointercancel fires when the browser takes over (e.g. pull-to-refresh, scroll).
+  // Without this, dragging state stays set and the next touch acts as a phantom drag.
+  const handleContainerPointerCancel = () => {
+    setDragging(null)
+    pointerDownPos.current = null
+  }
+
   const handlePointerMove = (e: React.PointerEvent) => {
     if (!dragging) return
     const time = getTimeFromPointer(e.clientX, e.clientY)
@@ -177,6 +184,7 @@ export function SeekBar({
           onPointerDown={handleContainerPointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handleContainerPointerUp}
+          onPointerCancel={handleContainerPointerCancel}
           style={{ touchAction: dragging ? 'none' : 'pan-y', position: 'relative' }}
         >
           {Array.from({ length: numRows }, (_, i) => (

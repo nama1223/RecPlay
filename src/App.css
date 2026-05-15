@@ -25,6 +25,20 @@
   letter-spacing: 0.5px;
 }
 
+/* Org name in header: looks like text but acts as link to file list */
+.org-name-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  cursor: pointer;
+  text-decoration: underline dotted rgba(192, 132, 252, 0.4);
+  text-underline-offset: 3px;
+}
+.org-name-link:hover { color: #e0b0ff; }
+
 .player {
   display: flex;
   flex-direction: column;
@@ -88,11 +102,12 @@
   box-shadow: 0 0 8px rgba(124,58,237,0.5);
 }
 
-/* ── File bar / Time bar ── */
+/* ── File bar ── */
 .file-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   padding: 3px 10px;
   background: #1a1a38;
   flex-shrink: 0;
@@ -104,23 +119,16 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 72%;
+  flex: 1;
+  min-width: 0;
 }
 
-.change-btn {
-  font-size: 11px;
-  padding: 3px 10px;
-  background: #2a1e52;
-  color: #aaa;
-  border-radius: 12px;
-  border: 1px solid #3a2a6a;
-}
-
-/* ── Time + Zoom combined row ── */
-.time-zoom-bar {
+/* ── Zoom row (centered, standalone) ── */
+.zoom-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
+  gap: 8px;
   padding: 3px 10px;
   flex-shrink: 0;
   background: #131328;
@@ -130,11 +138,12 @@
 .time-display {
   display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: 16px;
+  gap: 4px;
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
   font-weight: 700;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
 }
 
 .current-time { color: #c084fc; }
@@ -330,6 +339,7 @@
   position: absolute;
   cursor: grab;
   z-index: 20;
+  touch-action: none;  /* prevent browser scroll takeover before React re-renders */
   touch-action: none;
   width: 0;
   height: 0;
