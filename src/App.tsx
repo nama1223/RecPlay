@@ -7,7 +7,7 @@ import { useWaveform } from './hooks/useWaveform'
 import { useSectionSync } from './hooks/useSectionSync'
 import { OrgInfo, getStoredOrgs, storeOrg } from './hooks/useOrgAuth'
 import { computeWaveform, serializeWaveform, getWaveformResumeInfo, clearWaveformResume } from './utils/waveformCompute'
-import { normalizeFile, NormPhase, NORMALIZE_TARGET_LEVEL } from './utils/normalize'
+import { normalizeFile, NormPhase, NORMALIZE_TARGET_LEVEL, restoreSampleRate44to48 } from './utils/normalize'
 import { SeekBar } from './components/SeekBar/SeekBar'
 import { PlaybackControls } from './components/Controls/PlaybackControls'
 import { SectionList } from './components/Sections/SectionList'
@@ -281,6 +281,46 @@ export default function App() {
     }
   }
 
+  const handleRestore44to48 = async () => {
+    if (!src || !fileKey || duration <= 0) return
+    setWaveMenuOpen(false)
+
+    const RATIO = 44100 / 48000  // ≈ 0.9188
+    const newDur = Math.round(duration * RATIO)
+    const fmt = (s: number) => `${Math.floor(s / 3600)}h${Math.floor((s % 3600) / 60)}m${Math.floor(s % 60)}s`
+
+    if (!confirm(
+      `44.1kHz誤エンコードされたファイルを48kHzに修復します。\n\n` +
+      `現在の長さ: ${fmt(duration)}\n` +
+      `修復後の長さ: ${fmt(newDur)}（約 ${(RATIO * 100).toFixed(1)}% に縮小）\n\n` +
+      `区間の開始・終了位置も同じ比率で縮小されます。\n` +
+      `※ すでに正しい48kHzのファイルに実行すると壊れます。\n\n続けますか？`
+    )) return
+
+    setNormalizing(true)
+    setNormPct(0)
+    setNormPhase('encode')
+    try {
+      await restoreSampleRate44to48(src, duration, fileKey, (pct, phase) => {
+        setNormPct(pct)
+        setNormPhase(phase)
+      })
+      // Scale all section times by 44100/48000
+      importSections(sections.map((s) => ({
+        ...s,
+        startTime: Math.round(s.startTime * RATIO * 1000) / 1000,
+        endTime:   Math.round(s.endTime   * RATIO * 1000) / 1000,
+      })))
+      // Reload audio (cache-bust)
+      const bust = src.includes('?') ? `${src}&_r=${Date.now()}` : `${src}?_r=${Date.now()}`
+      loadUrl(bust)
+    } catch (e) {
+      alert(`修復に失敗しました: ${e}`)
+    } finally {
+      setNormalizing(false)
+    }
+  }
+
   /** Called by SectionItem after section normalize completes. */
   const handleSectionNormalized = useCallback(() => {
     setWaveformPeakLevel(NORMALIZE_TARGET_LEVEL)
@@ -361,6 +401,13 @@ export default function App() {
                       title={!waveformPeakLevel ? '先に波形を生成してください' : undefined}
                     >
                       🔊 ノーマライズ（全体）
+                    </button>
+                    <button
+                      className="wave-menu-item"
+                      onClick={handleRestore44to48}
+                      title="44.1kHz誤エンコードを48kHzに修復（一時機能）"
+                    >
+                      🔧 44.1→48kHz修復
                     </button>
                   </div>
                 )}
