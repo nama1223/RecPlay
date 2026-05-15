@@ -59,6 +59,7 @@ export default function App() {
     audioRef, currentTime, duration, isPlaying, src,
     togglePlayPause, seek, skip, playSection,
     loadFile, loadUrl, setExcludedZones, setSkipExcluded,
+    playbackRate, changePlaybackRate,
   } = useAudioPlayer()
 
   const { sections, addSection, updateSection, deleteSection, toggleExclude, importSections, reorderSections, undo, redo, undoCount, redoCount } = useSections()
@@ -437,9 +438,11 @@ export default function App() {
                   mode={mode}
                   currentTime={currentTime}
                   sections={sections}
+                  playbackRate={playbackRate}
                   onToggle={togglePlayPause}
                   onSkip={skip}
                   onSeek={seek}
+                  onPlaybackRateChange={changePlaybackRate}
                   skipValues={settings.skipValues}
                   activeSectionId={activeSectionId}
                   onMarkStart={handleMarkStart}

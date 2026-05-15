@@ -391,6 +391,12 @@
   border-color: #5a3a8a;
 }
 
+.play-btn-wrap {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
 .play-btn {
   padding: 6px 14px;
   border-radius: 10px;
@@ -403,6 +409,25 @@
   flex-shrink: 0;
 }
 .play-btn:active { opacity: 0.8; }
+
+.playback-rate-badge {
+  position: absolute;
+  bottom: -1px;
+  right: -1px;
+  background: rgba(30, 10, 60, 0.82);
+  color: #d4b8ff;
+  font-size: 9px;
+  line-height: 1;
+  padding: 2px 3px;
+  border-radius: 4px 0 8px 0;
+  pointer-events: none;
+  white-space: nowrap;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.playback-rate-badge.rate-normal {
+  color: #888;
+}
 
 /* ── Mark buttons (edit mode) ── */
 .mark-controls {

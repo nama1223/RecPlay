@@ -1,12 +1,18 @@
 import { useRef, useState, useCallback, useEffect } from 'react'
 import { ExcludedZone } from '../types'
 
+const RATE_MIN  = 0.5
+const RATE_MAX  = 2.0
+export const RATE_STEP = 0.05
+
 export function useAudioPlayer() {
   const audioRef = useRef<HTMLAudioElement>(null)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
   const [src, setSrc] = useState<string | null>(null)
+  const [playbackRate, setPlaybackRate] = useState(1.0)
+  const playbackRateRef = useRef(1.0)  // always in sync; readable from non-React callbacks
 
   const sectionEndRef = useRef<number | null>(null)
   const excludedZonesRef = useRef<ExcludedZone[]>([])
@@ -37,7 +43,12 @@ export function useAudioPlayer() {
     }
 
     const onDurationChange = () => {
-      if (isFinite(audio.duration)) setDuration(audio.duration)
+      if (isFinite(audio.duration)) {
+        setDuration(audio.duration)
+        // audio.load() resets playbackRate to 1 in some browsers — restore it
+        audio.playbackRate = playbackRateRef.current
+        audio.preservesPitch = true
+      }
     }
     const onPlay = () => setIsPlaying(true)
     const onPause = () => {
@@ -167,12 +178,25 @@ export function useAudioPlayer() {
     skipExcludedRef.current = val
   }, [])
 
+  const changePlaybackRate = useCallback((delta: number) => {
+    const next = Math.round((playbackRateRef.current + delta) * 100) / 100
+    const clamped = Math.max(RATE_MIN, Math.min(RATE_MAX, next))
+    playbackRateRef.current = clamped
+    setPlaybackRate(clamped)
+    const audio = audioRef.current
+    if (audio) {
+      audio.playbackRate = clamped
+      audio.preservesPitch = true
+    }
+  }, [])
+
   return {
     audioRef,
     currentTime,
     duration,
     isPlaying,
     src,
+    playbackRate,
     togglePlayPause,
     seek,
     skip,
@@ -181,5 +205,6 @@ export function useAudioPlayer() {
     loadUrl,
     setExcludedZones,
     setSkipExcluded,
+    changePlaybackRate,
   }
 }

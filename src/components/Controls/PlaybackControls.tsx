@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { AppMode, Section } from '../../types'
 
 interface Props {
@@ -5,9 +6,11 @@ interface Props {
   mode: AppMode
   currentTime: number
   sections: Section[]
+  playbackRate: number
   onToggle: () => void
   onSkip: (delta: number) => void
   onSeek: (time: number) => void
+  onPlaybackRateChange: (delta: number) => void
   skipValues: number[]
   activeSectionId: string | null
   onMarkStart: () => void
@@ -19,9 +22,11 @@ export function PlaybackControls({
   mode,
   currentTime,
   sections,
+  playbackRate,
   onToggle,
   onSkip,
   onSeek,
+  onPlaybackRateChange,
   skipValues,
   activeSectionId,
   onMarkStart,
@@ -38,13 +43,69 @@ export function PlaybackControls({
   const handleBack = () => {
     const threshold = currentTime - 0.5
     const prev = sections
-      // In play mode, skip the start of excluded sections
       .filter((s) => mode !== 'play' || !s.isExcluded)
       .map((s) => s.startTime)
       .filter((t) => t < threshold)
       .sort((a, b) => b - a)[0]
     onSeek(prev ?? 0)
   }
+
+  // ── play-button ref: wheel (passive:false) + swipe ───────────────────────
+  const playBtnRef = useRef<HTMLButtonElement>(null)
+  // Keep a ref to the latest callback so the event listeners never go stale
+  const rateChangeRef = useRef(onPlaybackRateChange)
+  useEffect(() => { rateChangeRef.current = onPlaybackRateChange }, [onPlaybackRateChange])
+  const toggleRef = useRef(onToggle)
+  useEffect(() => { toggleRef.current = onToggle }, [onToggle])
+
+  useEffect(() => {
+    const btn = playBtnRef.current
+    if (!btn) return
+
+    let touchStartY: number | null = null
+    let didSwipe = false
+
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      rateChangeRef.current(e.deltaY < 0 ? 0.05 : -0.05)
+    }
+
+    const onTouchStart = (e: TouchEvent) => {
+      touchStartY = e.touches[0].clientY
+      didSwipe = false
+    }
+
+    const onTouchEnd = (e: TouchEvent) => {
+      if (touchStartY === null) return
+      const delta = touchStartY - e.changedTouches[0].clientY  // positive = swipe up
+      touchStartY = null
+      if (Math.abs(delta) >= 20) {
+        didSwipe = true
+        e.preventDefault()
+        rateChangeRef.current(delta > 0 ? 0.05 : -0.05)
+      }
+    }
+
+    const onClick = () => {
+      if (didSwipe) { didSwipe = false; return }
+      toggleRef.current()
+    }
+
+    btn.addEventListener('wheel',      onWheel,      { passive: false })
+    btn.addEventListener('touchstart', onTouchStart, { passive: true  })
+    btn.addEventListener('touchend',   onTouchEnd,   { passive: false })
+    btn.addEventListener('click',      onClick)
+
+    return () => {
+      btn.removeEventListener('wheel',      onWheel)
+      btn.removeEventListener('touchstart', onTouchStart)
+      btn.removeEventListener('touchend',   onTouchEnd)
+      btn.removeEventListener('click',      onClick)
+    }
+  }, [])  // empty deps — uses refs for callbacks
+
+  const rateLabel = `${Math.round(playbackRate * 100)}%`
+  const rateAtNormal = Math.abs(playbackRate - 1.0) < 0.001
 
   return (
     <div className="controls-area">
@@ -53,9 +114,21 @@ export function PlaybackControls({
         {negatives.map((v) => (
           <button key={v} className="skip-btn" onClick={() => onSkip(v)}>{label(v)}</button>
         ))}
-        <button className="play-btn" onClick={onToggle}>
-          {isPlaying ? '⏹' : '▶'}
-        </button>
+
+        {/* Play button: wheel / swipe controls playback rate */}
+        <div className="play-btn-wrap">
+          <button
+            className="play-btn"
+            ref={playBtnRef}
+            title="再生 / 停止｜スクロール・スワイプで再生速度"
+          >
+            {isPlaying ? '⏹' : '▶'}
+          </button>
+          <span className={`playback-rate-badge${rateAtNormal ? ' rate-normal' : ''}`}>
+            {rateLabel}
+          </span>
+        </div>
+
         {positives.map((v) => (
           <button key={v} className="skip-btn" onClick={() => onSkip(v)}>{label(v)}</button>
         ))}
