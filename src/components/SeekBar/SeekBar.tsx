@@ -10,6 +10,7 @@ interface Props {
   sections: Section[]
   mode: AppMode
   waveformSamples: Float32Array | null
+  activeSectionId: string | null
   onSeek: (time: number) => void
   onSectionUpdate: (id: string, updates: Partial<Section>) => void
   onSectionLabelClick?: (sectionId: string) => void
@@ -33,6 +34,7 @@ export function SeekBar({
   sections,
   mode,
   waveformSamples,
+  activeSectionId,
   onSeek,
   onSectionUpdate,
   onSectionLabelClick,
@@ -197,6 +199,7 @@ export function SeekBar({
               sections={sections}
               mode={mode}
               activeDragId={dragging?.sectionId ?? null}
+              activeSectionId={activeSectionId}
               onFlagPointerDown={handleFlagPointerDown}
               onLabelClick={onSectionLabelClick}
             />

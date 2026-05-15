@@ -12,6 +12,7 @@ interface Props {
   sections: Section[]
   mode: AppMode
   activeDragId: string | null
+  activeSectionId: string | null
   onFlagPointerDown: (e: React.PointerEvent, sectionId: string, isStart: boolean) => void
   onLabelClick?: (sectionId: string) => void
 }
@@ -24,6 +25,7 @@ export function SeekBarRow({
   sections,
   mode,
   activeDragId,
+  activeSectionId,
   onFlagPointerDown,
   onLabelClick,
 }: Props) {
@@ -79,10 +81,11 @@ export function SeekBarRow({
             )
           }
 
+          const isActive = section.id === activeSectionId && mode === 'edit'
           return (
             <div key={section.id}>
               <div
-                className={`section-overlay ${isExcluded ? 'excluded' : ''}`}
+                className={`section-overlay ${isExcluded ? 'excluded' : ''}${isActive ? ' active' : ''}`}
                 style={{
                   left: `${left}%`,
                   right: `${right}%`,

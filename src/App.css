@@ -321,6 +321,15 @@
   text-overflow: ellipsis;
 }
 
+/* ── Active section blink (edit mode, selected for position setting) ── */
+@keyframes section-active-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.2; }
+}
+.section-overlay.active {
+  animation: section-active-blink 0.5s ease-in-out infinite;
+}
+
 /* ── Playhead ── */
 .playhead {
   position: absolute;
@@ -747,6 +756,19 @@
   border: 1px solid #3a2a6a;
 }
 .adj-btn:active { background: #3a2e72; }
+
+/* Compact play buttons inside flag-editor-header (●行) */
+.flag-play-btn {
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: #1e2a52;
+  color: #7eb8f8;
+  font-size: 11px;
+  border: 1px solid #2a3a6a;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.flag-play-btn:active { opacity: 0.7; }
 
 .close-btn {
   margin-left: auto;

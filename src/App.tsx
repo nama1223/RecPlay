@@ -473,6 +473,7 @@ export default function App() {
                 sections={sections}
                 mode={mode}
                 waveformSamples={waveformSamples}
+                activeSectionId={activeSectionId}
                 onSeek={seek}
                 onSectionUpdate={updateSection}
                 onSectionLabelClick={handleSectionLabelClick}
