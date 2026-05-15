@@ -169,6 +169,24 @@ export function SectionItem({
               >
                 {section.isExcluded ? '✓ 除外を解除' : '🚫 除外区間に設定'}
               </button>
+
+              {/* Quick-listen buttons for position check during editing */}
+              <div className="section-play-row">
+                <button
+                  className="action-btn play half"
+                  onClick={() => onPlay(section.startTime, section.endTime)}
+                >
+                  ▶ 区間再生
+                </button>
+                <button
+                  className="action-btn play half"
+                  onClick={() => onPlay(Math.max(section.startTime, section.endTime - 3), section.endTime)}
+                  title="終了位置の直前3秒を再生"
+                >
+                  ▶ ラスト3秒
+                </button>
+              </div>
+
               <FlagEditor
                 section={section}
                 duration={duration}
