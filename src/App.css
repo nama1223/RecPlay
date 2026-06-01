@@ -493,6 +493,7 @@
   overflow-y: auto;
   background: #161630;
   -webkit-overflow-scrolling: touch;
+  padding-bottom: 40px; /* 最下段が画面端に張り付かないよう余白 */
 }
 
 .section-list-header {
@@ -669,7 +670,35 @@
   width: 100%;
 }
 
+.section-item-expand {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
 .expand-icon { color: #443366; font-size: 11px; margin-left: 8px; }
+
+/* ── 横長画面（PC等）: 区間名25% ／ 開閉エリア75% ── */
+@media (orientation: landscape) {
+  .section-item-info {
+    flex: 0 0 25%;
+    max-width: 25%;
+    border-right: 1px solid #3a2f5e;
+    padding-right: 8px;
+    min-width: 0;
+  }
+  .section-item-expand {
+    flex: 1;
+    justify-content: center;
+    background: rgba(68, 51, 102, 0.18);
+    border-radius: 0 4px 4px 0;
+    min-height: 40px;
+  }
+  .section-item-expand .expand-icon {
+    font-size: 15px;
+    color: #9d7fd4;
+    margin-left: 0;
+  }
+}
 
 .section-item-actions {
   padding: 0 10px 6px;

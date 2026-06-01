@@ -125,6 +125,23 @@ export default function App() {
     if (duration > 0) initZoom(duration)
   }, [duration, initZoom])
 
+  // ── Space キーで再生/停止 ────────────────────────────────────────────────
+  const togglePlayPauseRef = useRef(togglePlayPause)
+  useEffect(() => { togglePlayPauseRef.current = togglePlayPause }, [togglePlayPause])
+
+  useEffect(() => {
+    if (screen !== 'player') return
+    const handler = (e: KeyboardEvent) => {
+      if (e.code !== 'Space') return
+      const target = e.target as HTMLElement
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return
+      e.preventDefault()
+      togglePlayPauseRef.current()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [screen])
+
   useEffect(() => {
     const excluded = sections.filter((s) => s.isExcluded).map((s) => ({ start: s.startTime, end: s.endTime }))
     setExcludedZones(excluded)

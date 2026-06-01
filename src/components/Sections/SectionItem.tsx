@@ -143,7 +143,9 @@ export function SectionItem({
             {formatTime(section.startTime)} – {formatTime(section.endTime)}
           </span>
         </div>
-        <span className="expand-icon">{expanded ? '▲' : '▼'}</span>
+        <div className="section-item-expand">
+          <span className="expand-icon">{expanded ? '▲' : '▼'}</span>
+        </div>
       </div>
 
       {expanded && (
