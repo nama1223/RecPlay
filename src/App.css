@@ -626,7 +626,7 @@
   min-height: 40px;
 }
 
-/* One-line layout: [label] [time] */
+/* One-line layout: [label] | [time ▼] */
 .section-item-info {
   display: flex;
   flex-direction: row;
@@ -670,14 +670,16 @@
   width: 100%;
 }
 
+/* タイム＋開閉アイコンをまとめるエリア（ポートレートでは右端に配置） */
 .section-item-expand {
   display: flex;
   align-items: center;
   flex-shrink: 0;
+  gap: 6px;
 }
-.expand-icon { color: #443366; font-size: 11px; margin-left: 8px; }
+.expand-icon { color: #443366; font-size: 11px; }
 
-/* ── 横長画面（PC等）: 区間名25% ／ 開閉エリア75% ── */
+/* ── 横長画面（PC等）: 区間名25% ／ 開閉エリア（タイム含む）75% ── */
 @media (orientation: landscape) {
   .section-item-info {
     flex: 0 0 25%;
@@ -696,7 +698,6 @@
   .section-item-expand .expand-icon {
     font-size: 15px;
     color: #9d7fd4;
-    margin-left: 0;
   }
 }
 

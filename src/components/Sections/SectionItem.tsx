@@ -139,11 +139,11 @@ export function SectionItem({
               {mode === 'edit' && <span className="edit-hint"> ✏️</span>}
             </span>
           )}
+        </div>
+        <div className="section-item-expand">
           <span className="section-time">
             {formatTime(section.startTime)} – {formatTime(section.endTime)}
           </span>
-        </div>
-        <div className="section-item-expand">
           <span className="expand-icon">{expanded ? '▲' : '▼'}</span>
         </div>
       </div>
