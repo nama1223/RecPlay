@@ -161,6 +161,15 @@ export default function App() {
     importSections([])               // clear UI immediately; sync is blocked until remote loads
   }
 
+  // リネーム完了時：プレーヤーで開いているファイルが対象ならsrcとfileKeyを更新
+  const handleRename = useCallback((oldKey: string, newKey: string, newName: string) => {
+    if (fileKey === oldKey) {
+      setFileKey(newKey)
+      setFileName(newName)
+      loadUrl(buildWorkerAudioUrl(newKey))
+    }
+  }, [fileKey, loadUrl])
+
   const handleSectionLabelClick = (id: string) => {
     setActiveSectionId(id)
     setScrollTarget((prev) => ({ id, seq: (prev?.seq ?? 0) + 1 }))
@@ -428,6 +437,7 @@ export default function App() {
         <FileListPage
           org={org}
           onFileSelect={handleFileSelect}
+          onRename={handleRename}
           onLogout={handleLogout}
         />
       )}

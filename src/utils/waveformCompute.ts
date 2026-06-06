@@ -129,9 +129,24 @@ export async function computeWaveform(
     onProgress?.(Math.round((startChunk / numChunks) * 100), normalizeRms(rawBins))
   }
 
-  // Get file size (needed for byte-range calculation)
+  // Get file size — HEADで取得し、失敗したら bytes=0-0 のRangeレスポンスから推測
+  let fileSize = 0
   const head = await fetch(audioUrl, { method: 'HEAD' })
-  const fileSize = parseInt(head.headers.get('Content-Length') ?? '0')
+  if (head.ok) {
+    fileSize = parseInt(head.headers.get('Content-Length') ?? '0')
+  }
+  if (!fileSize) {
+    // HEADが効かない環境（blob URL など）向けフォールバック：
+    // bytes=0-0 でGETし、Content-Rangeヘッダーの total から取得
+    const probe = await fetch(audioUrl, { headers: { Range: 'bytes=0-0' } })
+    const contentRange = probe.headers.get('Content-Range') // "bytes 0-0/12345678"
+    if (contentRange) {
+      const m = contentRange.match(/\/(\d+)$/)
+      if (m) fileSize = parseInt(m[1])
+    }
+    // bodyを消費してコネクションを解放
+    await probe.body?.cancel()
+  }
   if (!fileSize) throw new Error('ファイルサイズを取得できませんでした')
 
   const actx = new AudioContext()

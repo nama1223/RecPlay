@@ -13,6 +13,7 @@ interface AudioFile {
 interface Props {
   org: OrgInfo
   onFileSelect: (url: string, fileKey: string, name: string) => void
+  onRename?: (oldKey: string, newKey: string, newName: string) => void
   onLogout: () => void
 }
 
@@ -45,7 +46,7 @@ function replaceOwnKey(oldKey: string, newKey: string): void {
   localStorage.setItem(LS_KEY, JSON.stringify(keys))
 }
 
-export function FileListPage({ org, onFileSelect, onLogout }: Props) {
+export function FileListPage({ org, onFileSelect, onRename, onLogout }: Props) {
   const [files, setFiles] = useState<AudioFile[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -144,6 +145,7 @@ export function FileListPage({ org, onFileSelect, onLogout }: Props) {
       if (newKey && newKey !== renamingKey) {
         replaceOwnKey(renamingKey, newKey)
         setOwnKeys(getOwnKeys())
+        onRename?.(renamingKey, newKey, renameValue.trim())
       }
       setRenamingKey(null)
       load()
