@@ -21,6 +21,7 @@ interface Props {
   onActivate: (id: string) => void
   scrollTarget?: { id: string; seq: number } | null
   hasWaveform?: boolean
+  fileName?: string
   onAddSection: () => void
   onUndo: () => void
   onRedo: () => void
@@ -51,6 +52,7 @@ export function SectionList({
   onActivate,
   scrollTarget,
   hasWaveform,
+  fileName,
   onAddSection,
   onUndo,
   onRedo,
@@ -93,7 +95,7 @@ export function SectionList({
     if (!audioSrc) return
     setDlAll(true)
     try {
-      await downloadWithExcludes(audioSrc, sections, duration, '録音_編集済み.mp3')
+      await downloadWithExcludes(audioSrc, sections, duration, `${fileName ? fileName + '_' : ''}録音_編集済み.mp3`)
     } catch (e) {
       alert(`ダウンロードに失敗しました: ${e}`)
     } finally {
@@ -211,6 +213,7 @@ export function SectionList({
               isActive={activeSectionId === s.id}
               scrollTarget={scrollTarget}
               hasWaveform={hasWaveform}
+              fileName={fileName}
               onPlay={onPlay}
               onUpdate={onUpdate}
               onDelete={onDelete}

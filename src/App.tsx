@@ -459,7 +459,7 @@ export default function App() {
                       <button
                         className="wave-menu-item"
                         onClick={() => {
-                          const url = `${location.origin}${location.pathname}?url=${encodeURIComponent(buildWorkerAudioUrl(fileKey))}`
+                          const url = `${location.origin}${location.pathname}?url=${encodeURIComponent(buildWorkerAudioUrl(fileKey))}&openExternalBrowser=1`
                           navigator.clipboard.writeText(url).then(() => alert('URLをコピーしました'))
                           setWaveMenuOpen(false)
                         }}
@@ -577,6 +577,7 @@ export default function App() {
                   onActivate={setActiveSectionId}
                   scrollTarget={scrollTarget}
                   hasWaveform={waveformStored && !!waveformPeakLevel}
+                  fileName={fileName}
                   onAddSection={handleAddSection}
                   onUndo={undo}
                   onRedo={redo}

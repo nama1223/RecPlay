@@ -14,6 +14,7 @@ interface Props {
   isActive: boolean
   scrollTarget?: { id: string; seq: number } | null
   hasWaveform?: boolean
+  fileName?: string
   onPlay: (start: number, end: number) => void
   onUpdate: (id: string, updates: Partial<Section>) => void
   onDelete: (id: string) => void
@@ -31,6 +32,7 @@ export function SectionItem({
   isActive,
   scrollTarget,
   hasWaveform,
+  fileName,
   onPlay,
   onUpdate,
   onDelete,
@@ -76,7 +78,7 @@ export function SectionItem({
     if (!audioSrc) return
     setDownloading(true)
     try {
-      await downloadClip(audioSrc, section.startTime, section.endTime, duration, `${section.label}.mp3`)
+      await downloadClip(audioSrc, section.startTime, section.endTime, duration, `${fileName ? fileName + '_' : ''}${section.label}.mp3`)
     } catch (e) {
       alert(`ダウンロードに失敗しました: ${e}`)
     } finally {
