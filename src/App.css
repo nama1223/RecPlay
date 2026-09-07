@@ -388,6 +388,29 @@
   overflow-x: auto;
 }
 
+.auth-new-label {
+  color: #a0a0b0;
+  font-size: 13px;
+  margin-bottom: 8px;
+  text-align: center;
+}
+
+.auth-divider {
+  border: none;
+  border-top: 1px solid #4a3a8a;
+  margin: 20px 0;
+  width: 100%;
+}
+
+.pwa-install-btn {
+  width: 100%;
+  font-size: 14px;
+  margin-top: 16px;
+  background: #3a2a7a;
+  border-color: #5a4a9a;
+}
+.pwa-install-btn:hover { background: #4a3a8a; }
+
 .skip-btn {
   padding: 6px 5px;
   border-radius: 10px;

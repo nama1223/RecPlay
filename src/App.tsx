@@ -43,7 +43,30 @@ function keyFromUrl(url: string): string | null {
 }
 
 export default function App() {
-  const [screen, setScreen] = useState<Screen>('auth')
+  const [screen, _setScreen] = useState<Screen>('auth')
+
+  // History APIを利用してAndroidの「戻る」ボタンに対応する
+  const setScreen = useCallback((newScreen: Screen, replace = false) => {
+    _setScreen(newScreen)
+    if (replace) {
+      window.history.replaceState({ screen: newScreen }, '')
+    } else {
+      window.history.pushState({ screen: newScreen }, '')
+    }
+  }, [])
+
+  useEffect(() => {
+    // 初期状態を登録
+    window.history.replaceState({ screen: 'auth' }, '')
+    const onPopState = (e: PopStateEvent) => {
+      if (e.state && e.state.screen) {
+        _setScreen(e.state.screen)
+      }
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [])
+
   const [org, setOrg] = useState<OrgInfo | null>(null)
   const [mode, setMode] = useState<AppMode>('play')
   const [fileLoaded, setFileLoaded] = useState(false)
