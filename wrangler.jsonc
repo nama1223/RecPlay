@@ -32,7 +32,10 @@
 			"id": "5410a23ebfdc46488258f6decb119b24",
 			"remote": true
 		}
-	]
+	],
+	"triggers": {
+		"crons": ["0 15 * * *"]
+	}
 	/**
 	 * Required secrets (set via: wrangler secret put SECRET_NAME)
 	 *   R2_ACCESS_KEY_ID     - R2 API token access key

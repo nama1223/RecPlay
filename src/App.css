@@ -1542,6 +1542,345 @@
 }
 .icon-btn.danger:hover { background: #3a1a1a; }
 
+/* ── Admin: total storage ── */
+.admin-total-storage {
+  font-size: 13px;
+  color: #9988cc;
+  padding: 8px 12px;
+  background: #0e0e24;
+  border-radius: 8px;
+  border: 1px solid #2a2a4a;
+}
+.admin-total-storage strong { color: #c084fc; }
+
+/* ── Admin: org size badge ── */
+.admin-org-size {
+  font-size: 11px;
+  color: #7a7aaa;
+  margin-left: 8px;
+  font-weight: 400;
+}
+
+/* ── Admin: file count badge ── */
+.admin-file-count {
+  font-size: 12px;
+  color: #7a7aaa;
+  margin-left: 6px;
+  font-weight: 400;
+}
+
+/* ── Admin: file expiry ── */
+.admin-file-expiry {
+  color: #9988bb;
+  font-size: 10px;
+}
+
+/* ── Admin: settings form ── */
+.admin-settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.admin-setting-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.admin-setting-label {
+  font-size: 12px;
+  color: #9988cc;
+  font-weight: 600;
+}
+
+.admin-setting-input {
+  background: #2a1e52;
+  border: 1px solid #3a2a6a;
+  color: #eeeeff;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 14px;
+  width: 100%;
+  max-width: 200px;
+}
+.admin-setting-input::placeholder { color: #554477; }
+
+.admin-setting-hint {
+  font-size: 11px;
+  color: #665588;
+}
+
+.admin-save-btn {
+  max-width: 200px;
+}
+
+/* ── Header capacity display ── */
+.header-capacity {
+  font-size: 11px;
+  color: #7a7aaa;
+  font-weight: 400;
+  margin-left: 6px;
+}
+
+/* ── Capacity gauge ── */
+.capacity-gauge-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.capacity-gauge {
+  flex: 1;
+  height: 8px;
+  background: #2a1e52;
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+
+.capacity-gauge-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #7c3aed, #c084fc);
+  border-radius: 4px;
+  transition: width 0.3s;
+}
+.capacity-gauge-fill.warning {
+  background: linear-gradient(90deg, #f59e0b, #fbbf24);
+}
+.capacity-gauge-fill.danger {
+  background: linear-gradient(90deg, #ef4444, #f87171);
+}
+
+.capacity-gauge-text {
+  font-size: 11px;
+  color: #9988cc;
+  min-width: 32px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.capacity-gauge-delete-zone {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: repeating-linear-gradient(
+    45deg, rgba(239, 68, 68, 0.3), rgba(239, 68, 68, 0.3) 3px,
+    transparent 3px, transparent 6px
+  );
+}
+
+/* ── File item expiry ── */
+.file-item-expiry {
+  color: #8877aa;
+  font-size: 11px;
+}
+
+/* ── Overflow modal ── */
+.overflow-modal {
+  background: #1a1a36;
+  border: 1px solid #4a3a7a;
+  border-radius: 16px;
+  padding: 20px;
+  width: 90%;
+  max-width: 500px;
+  max-height: 80vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+}
+
+.overflow-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #f59e0b;
+  margin: 0;
+  text-align: center;
+}
+
+.overflow-info {
+  font-size: 13px;
+  color: #b0a0e0;
+  background: #0e0e24;
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.overflow-over {
+  color: #f87171;
+  font-weight: 600;
+}
+.overflow-ok {
+  color: #4ade80;
+  font-weight: 600;
+}
+
+.overflow-option-btn {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 16px;
+  background: #1e1e42;
+  border: 1px solid #3a2a6a;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: left;
+}
+.overflow-option-btn:hover {
+  background: #2a1e52;
+  border-color: #7c3aed;
+}
+
+.overflow-option-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #c084fc;
+}
+.overflow-option-desc {
+  font-size: 12px;
+  color: #7a7aaa;
+}
+
+.overflow-auto-preview {
+  font-size: 12px;
+  color: #8877aa;
+  background: #0e0e1e;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-top: -4px;
+}
+
+.overflow-preview-label {
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: #9988cc;
+}
+
+.overflow-preview-item {
+  padding: 2px 0;
+  color: #7a7aaa;
+}
+
+.overflow-cancel-btn {
+  background: none;
+  border: none;
+  color: #6d6daa;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: center;
+  padding: 8px;
+}
+.overflow-cancel-btn:hover { color: #c084fc; }
+
+/* ── Overflow: gauge area ── */
+.overflow-gauge-area {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.overflow-gauge-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #7a7aaa;
+  font-variant-numeric: tabular-nums;
+}
+
+.overflow-gauge-summary {
+  font-size: 12px;
+  color: #b0a0e0;
+  text-align: center;
+}
+
+/* ── Overflow: file list (manual select) ── */
+.overflow-file-list {
+  max-height: 240px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.overflow-file-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.1s;
+  font-size: 13px;
+  color: #b0a0e0;
+}
+.overflow-file-item:hover { background: #1e1e42; }
+.overflow-file-item.selected { background: #2a1a1a; border: 1px solid #7a3a3a; }
+.overflow-file-item input[type="checkbox"] { accent-color: #ef4444; flex-shrink: 0; }
+
+.overflow-file-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.overflow-file-size {
+  font-size: 11px;
+  color: #7a7aaa;
+  flex-shrink: 0;
+}
+
+/* ── Overflow: actions ── */
+.overflow-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.overflow-delete-confirm-btn {
+  background: linear-gradient(135deg, #dc2626, #ef4444) !important;
+  box-shadow: 0 4px 14px rgba(220, 38, 38, 0.4) !important;
+}
+
+/* ── Overflow: confirm delete list ── */
+.overflow-confirm-text {
+  font-size: 13px;
+  color: #b0a0e0;
+  text-align: center;
+  margin: 0;
+  line-height: 1.6;
+}
+
+.overflow-delete-list {
+  background: #0e0e1e;
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.overflow-delete-item {
+  font-size: 13px;
+  color: #f87171;
+  padding: 4px 0;
+}
+
+.overflow-confirm-summary {
+  font-size: 13px;
+  color: #9988cc;
+  text-align: center;
+  font-weight: 600;
+}
+
 /* ── Scrollbar ── */
 ::-webkit-scrollbar { width: 3px; }
 ::-webkit-scrollbar-track { background: #0e0e24; }

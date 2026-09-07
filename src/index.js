@@ -100,6 +100,31 @@ async function createPresignedPutUrl(env, key, expiresIn = 3600) {
 //   R2  → env.recplay_audio  (bucket: recplay-audio)
 //   KV  → env.RECPLAY_KV
 
+// ── File-level metadata helpers (per-org, stored in KV) ───────────────────
+// KV key: `file_meta:{orgId}` -> { "orgId/timestamp_file.mp3": { retentionDays: 90, protected: true }, ... }
+async function getFileMeta(env, orgId) {
+  const raw = await env.RECPLAY_KV.get(`file_meta:${orgId}`);
+  return raw ? JSON.parse(raw) : {};
+}
+
+async function setFileMeta(env, orgId, meta) {
+  await env.RECPLAY_KV.put(`file_meta:${orgId}`, JSON.stringify(meta));
+}
+
+// ── List ALL R2 objects for a prefix (handles pagination) ─────────────────
+async function listAllObjects(bucket, prefix) {
+  const objects = [];
+  let cursor = undefined;
+  do {
+    const opts = { prefix };
+    if (cursor) opts.cursor = cursor;
+    const list = await bucket.list(opts);
+    objects.push(...list.objects);
+    cursor = list.truncated ? list.cursor : undefined;
+  } while (cursor);
+  return objects;
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -286,8 +311,8 @@ export default {
       if (method === 'GET' && pathname === '/files') {
         const orgId = url.searchParams.get('org');
         if (!orgId) return json({ error: 'missing org param' }, 400);
-        const list = await env.recplay_audio.list({ prefix: `${orgId}/` });
-        const files = list.objects
+        const allObjects = await listAllObjects(env.recplay_audio, `${orgId}/`);
+        const files = allObjects
           .filter((o) => !o.key.startsWith('sections/'))
           .map((o) => ({
             key: o.key,
@@ -295,7 +320,15 @@ export default {
             size: o.size,
             uploadedAt: o.uploaded,
           }));
-        return json({ files });
+        const totalSize = allObjects.reduce((sum, o) => sum + o.size, 0);
+        // Look up org-level storage settings
+        const raw = await env.RECPLAY_KV.get('orgs');
+        const orgs = raw ? JSON.parse(raw) : [];
+        const org = orgs.find((o) => o.id === orgId);
+        const result = { files, totalSize };
+        if (org && org.storageLimitGB != null) result.storageLimitGB = org.storageLimitGB;
+        if (org && org.retentionDays != null) result.retentionDays = org.retentionDays;
+        return json(result);
       }
 
       // POST /files/copy — ファイルを複製（音声 + sections + waveform）
@@ -345,6 +378,20 @@ export default {
         return json({ ok: true });
       }
 
+      // DELETE /files/batch — 複数ファイル一括削除（音声 + sections + waveform）
+      if (method === 'DELETE' && pathname === '/files/batch') {
+        const { keys } = await request.json();
+        if (!Array.isArray(keys) || keys.length === 0) return json({ error: 'keys array required' }, 400);
+        await Promise.all(
+          keys.flatMap((key) => [
+            env.recplay_audio.delete(key),
+            env.recplay_audio.delete(`sections/${key}.json`),
+            env.recplay_audio.delete(`waveforms/${key}.json`),
+          ]),
+        );
+        return json({ ok: true });
+      }
+
       // PATCH /files — ファイル名変更（R2内でコピー→削除）
       if (method === 'PATCH' && pathname === '/files') {
         const { key, newName } = await request.json();
@@ -375,7 +422,17 @@ export default {
         if (!isAdmin(request, env)) return json({ error: 'Unauthorized' }, 401);
         const raw = await env.RECPLAY_KV.get('orgs');
         const orgs = raw ? JSON.parse(raw) : [];
-        return json({ orgs: orgs.map((o) => ({ id: o.id, name: o.name })) });
+        const orgsWithSize = await Promise.all(
+          orgs.map(async (o) => {
+            const objects = await listAllObjects(env.recplay_audio, `${o.id}/`);
+            const totalSize = objects.reduce((sum, obj) => sum + obj.size, 0);
+            const entry = { id: o.id, name: o.name, totalSize };
+            if (o.storageLimitGB != null) entry.storageLimitGB = o.storageLimitGB;
+            if (o.retentionDays != null) entry.retentionDays = o.retentionDays;
+            return entry;
+          }),
+        );
+        return json({ orgs: orgsWithSize });
       }
 
       if (method === 'POST' && pathname === '/admin/orgs') {
@@ -400,6 +457,20 @@ export default {
         if (idx === -1) return json({ error: 'not found' }, 404);
         if (updates.name) orgs[idx].name = updates.name;
         if (updates.password) orgs[idx].password = updates.password;
+        if (updates.storageLimitGB !== undefined) {
+          if (updates.storageLimitGB === null || updates.storageLimitGB === 0) {
+            delete orgs[idx].storageLimitGB;
+          } else {
+            orgs[idx].storageLimitGB = updates.storageLimitGB;
+          }
+        }
+        if (updates.retentionDays !== undefined) {
+          if (updates.retentionDays === null || updates.retentionDays === 0) {
+            delete orgs[idx].retentionDays;
+          } else {
+            orgs[idx].retentionDays = updates.retentionDays;
+          }
+        }
         await env.RECPLAY_KV.put('orgs', JSON.stringify(orgs));
         return json({ ok: true });
       }
@@ -441,6 +512,33 @@ export default {
       return new Response('Not Found', { status: 404 });
     } catch (err) {
       return json({ error: String(err) }, 500);
+    }
+  },
+
+  // ── Scheduled handler: retention-based auto-cleanup ────────────────────
+  async scheduled(event, env, ctx) {
+    const raw = await env.RECPLAY_KV.get('orgs');
+    const orgs = raw ? JSON.parse(raw) : [];
+    const now = Date.now();
+
+    for (const org of orgs) {
+      if (!org.retentionDays) continue;
+      const fileMeta = await getFileMeta(env, org.id);
+      const objects = await listAllObjects(env.recplay_audio, `${org.id}/`);
+
+      for (const obj of objects) {
+        const meta = fileMeta[obj.key];
+        if (meta && meta.protected) continue;
+        const fileRetention = (meta && meta.retentionDays) || org.retentionDays;
+        const expiresAt = new Date(obj.uploaded).getTime() + fileRetention * 24 * 60 * 60 * 1000;
+        if (now >= expiresAt) {
+          await Promise.all([
+            env.recplay_audio.delete(obj.key),
+            env.recplay_audio.delete(`sections/${obj.key}.json`),
+            env.recplay_audio.delete(`waveforms/${obj.key}.json`),
+          ]);
+        }
+      }
     }
   },
 };
