@@ -1385,10 +1385,7 @@
   align-items: center;
   gap: 2px;
   flex-shrink: 0;
-  opacity: 0;
-  transition: opacity 0.15s;
 }
-.file-item-row:hover .file-item-actions { opacity: 1; }
 
 .file-action-icon {
   background: none;

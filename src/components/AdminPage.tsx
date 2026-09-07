@@ -194,7 +194,9 @@ export function AdminPage({ onLogout }: Props) {
               <div key={org.id} className={`admin-org-item ${selectedOrg?.id === org.id ? 'active' : ''}`}>
                 <button className="admin-org-name" onClick={() => loadFiles(org)}>
                   🎵 {org.name}
-                  <span className="admin-org-size">{fmt(org.totalSize ?? 0)}</span>
+                  <span className="admin-org-size">
+                    {fmt(org.totalSize ?? 0)} / {org.storageLimitGB ? `${org.storageLimitGB}GB` : '制限なし'} - {org.retentionDays ? `${org.retentionDays}日` : '無期限'}
+                  </span>
                 </button>
                 <button className="icon-btn danger" onClick={() => deleteOrg(org)} title="削除">✕</button>
               </div>
