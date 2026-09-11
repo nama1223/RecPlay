@@ -112,6 +112,17 @@ export function SeekBar({
   }
   const handleResizeEnd = () => { resizeDrag.current = null }
 
+  // ── Container Resize Observer ─────────────────────────────────────────────
+  const [containerWidth, setContainerWidth] = useState(0)
+  useEffect(() => {
+    if (!containerRef.current) return
+    const observer = new ResizeObserver((entries) => {
+      setContainerWidth(entries[0].contentRect.width)
+    })
+    observer.observe(containerRef.current)
+    return () => observer.disconnect()
+  }, [])
+
   // ── Waveform canvas ────────────────────────────────────────────────────────
   useEffect(() => {
     const canvas = canvasRef.current
@@ -124,9 +135,12 @@ export function SeekBar({
       return
     }
 
-    const trackWidth = container.offsetWidth - LABEL_WIDTH
+    const width = containerWidth || container.offsetWidth
+    if (width <= 0) return
+
+    const trackWidth = width - LABEL_WIDTH
     const totalHeight = numRows * ROW_HEIGHT
-    canvas.width = container.offsetWidth
+    canvas.width = width
     canvas.height = totalHeight
 
     const ctx = canvas.getContext('2d')
@@ -154,7 +168,7 @@ export function SeekBar({
         ctx.fillRect(x, rowY + ROW_HEIGHT / 2 - barH / 2, Math.max(1, binPx - 0.5), barH)
       }
     }
-  }, [waveformSamples, numRows, secondsPerRow, duration])
+  }, [waveformSamples, numRows, secondsPerRow, duration, containerWidth])
 
   // ── Pointer handlers ───────────────────────────────────────────────────────
   const handleContainerPointerDown = (e: React.PointerEvent) => {
