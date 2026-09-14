@@ -100,47 +100,63 @@ export default function App() {
   const onRemoteUpdate = useCallback((secs: Section[]) => importSections(secs), [importSections])
   const { lastSyncedAt, isDirty } = useSectionSync(fileKey, fileLoadCounter, mode, sections, onRemoteUpdate)
 
-  // ── ?url= パラメータ → 自動ログイン & 直接プレーヤー ──────────────────
+  // ── ?id= または ?url= パラメータ → 自動ログイン & 直接プレーヤー ──────────────────
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
+    const idParam = params.get('id')
     const urlParam = params.get('url')
-    if (!urlParam) return
+    if (!idParam && !urlParam) return
 
-    const decoded = decodeURIComponent(urlParam)
-    const key = keyFromUrl(decoded)
-    const orgId = key?.split('/')[0]
+    const handleKey = (key: string | null, fallbackUrl?: string) => {
+      const orgId = key?.split('/')[0]
+      const audioUrl = key ? buildWorkerAudioUrl(key) : (fallbackUrl ?? '')
+      // タイムスタンプとファイル名の分離（_以降がファイル名）
+      const fileName = key ? key.split('/').pop()?.split('_').slice(1).join('_') ?? key : (fallbackUrl?.split('/').pop() ?? '')
 
-    // キーが取れた場合はWorker経由で再生、なければURLをそのまま使う
-    const audioUrl = key ? buildWorkerAudioUrl(key) : decoded
+      const openPlayer = (detectedOrg?: OrgInfo) => {
+        loadUrl(audioUrl)
+        setFileName(fileName)
+        setFileKey(key)
+        setFileLoaded(true)
+        if (detectedOrg) setOrg(detectedOrg)
+        setScreen('player', true)
+      }
 
-    const openPlayer = (detectedOrg?: OrgInfo) => {
-      loadUrl(audioUrl)
-      setFileName(decoded.split('/').pop() ?? decoded)
-      setFileKey(key)
-      setFileLoaded(true)
-      if (detectedOrg) setOrg(detectedOrg)
-      setScreen('player')
+      if (orgId && orgId.startsWith('org_')) {
+        const stored = getStoredOrgs()
+        const existing = stored.find((o) => o.id === orgId)
+        if (existing) {
+          openPlayer(existing)
+          return
+        }
+        fetch(`${WORKER_URL}/org?id=${orgId}`)
+          .then((r) => r.ok ? r.json() : null)
+          .then((data) => {
+            const detectedOrg: OrgInfo | undefined = data ? { id: data.id, name: data.name } : undefined
+            if (detectedOrg) storeOrg(detectedOrg)
+            openPlayer(detectedOrg)
+          })
+          .catch(() => openPlayer())
+      } else {
+        openPlayer()
+      }
     }
 
-    if (orgId && orgId.startsWith('org_')) {
-      // すでにLocalStorageにある？
-      const stored = getStoredOrgs()
-      const existing = stored.find((o) => o.id === orgId)
-      if (existing) {
-        openPlayer(existing)
-        return
-      }
-      // Worker から団体名を取得して自動ログイン
-      fetch(`${WORKER_URL}/org?id=${orgId}`)
-        .then((r) => r.ok ? r.json() : null)
-        .then((data) => {
-          const detectedOrg: OrgInfo | undefined = data ? { id: data.id, name: data.name } : undefined
-          if (detectedOrg) storeOrg(detectedOrg)
-          openPlayer(detectedOrg)
+    if (idParam) {
+      fetch(`${WORKER_URL}/resolve?id=${idParam}`)
+        .then(r => r.ok ? r.json() : { key: null })
+        .then(data => {
+          if (data.key) {
+            handleKey(data.key)
+          } else {
+            alert('ファイルが見つかりません（削除されたかURLが無効です）')
+          }
         })
-        .catch(() => openPlayer())
-    } else {
-      openPlayer()
+        .catch(() => alert('通信エラーが発生しました'))
+    } else if (urlParam) {
+      const decoded = decodeURIComponent(urlParam)
+      const key = keyFromUrl(decoded)
+      handleKey(key, decoded)
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -482,7 +498,11 @@ export default function App() {
                       <button
                         className="wave-menu-item"
                         onClick={() => {
-                          const url = `${location.origin}${location.pathname}?url=${encodeURIComponent(buildWorkerAudioUrl(fileKey))}&openExternalBrowser=1`
+                          const parts = fileKey.split('/')
+                          const orgId = parts[0]
+                          const timeStr = parts[1].split('_')[0]
+                          const shortId = `${orgId}-${timeStr}`
+                          const url = `${location.origin}${location.pathname}?id=${shortId}&openExternalBrowser=1`
                           navigator.clipboard.writeText(url).then(() => alert('URLをコピーしました'))
                           setWaveMenuOpen(false)
                         }}

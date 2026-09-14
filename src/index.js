@@ -213,6 +213,17 @@ export default {
         return json({ ok: true });
       }
 
+      // GET /resolve?id={shortId} — プレフィックスマッチで完全なキーを取得する
+      if (method === 'GET' && pathname === '/resolve') {
+        const id = url.searchParams.get('id');
+        if (!id) return json({ error: 'missing id' }, 400);
+        // id: org_xxx-1725700000000 -> prefix: org_xxx/1725700000000
+        const prefix = id.replace('-', '/');
+        const list = await env.recplay_audio.list({ prefix, limit: 1 });
+        if (list.objects.length === 0) return json({ error: 'not found' }, 404);
+        return json({ key: list.objects[0].key });
+      }
+
       // GET /orgs — public list (no passwords)
       if (method === 'GET' && pathname === '/orgs') {
         const raw = await env.RECPLAY_KV.get('orgs');
