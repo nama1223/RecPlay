@@ -240,6 +240,9 @@ export default function App() {
   const handleSectionLabelClick = (id: string) => {
     setActiveSectionId(id)
     setScrollTarget((prev) => ({ id, seq: (prev?.seq ?? 0) + 1 }))
+    // ラベルを押したら、その区間の冒頭へシーク位置も移動する
+    const sec = sections.find((s) => s.id === id)
+    if (sec) seek(sec.startTime)
   }
 
   const handleAddSection = () => {

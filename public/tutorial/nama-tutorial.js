@@ -20,7 +20,7 @@
   var rec = loadRec();
   if (!rec.chapters) rec.chapters = {};
 
-  var ASSET_V = '9'; // 素材・キットの版。更新のたびに上げると端末側の古いキャッシュを確実に回避できる
+  var ASSET_V = '10'; // 素材・キットの版。更新のたびに上げると端末側の古いキャッシュを確実に回避できる
   function poseSrc(pose) { return IMG + 'N_' + pose + '.webp?v=' + ASSET_V; }
   function chapterById(id) { for (var i = 0; i < cfg.chapters.length; i++) if (cfg.chapters[i].id === id) return cfg.chapters[i]; return null; }
   function isDone(ch) { var r = rec.chapters[ch.id]; return !!(r && r.done && r.version >= (ch.since || 1)); }
@@ -295,7 +295,7 @@
     gagReset();
     player.runId++; // 保留中の非同期処理をすべて無効化
     if (player.watchTimer) { clearInterval(player.watchTimer); player.watchTimer = null; }
-    if (player.tapHandler && player.el) { player.el.removeEventListener('click', player.tapHandler, true); player.tapHandler = null; }
+    if (player.tapHandler && player.el) { player.el.removeEventListener('click', player.tapHandler, true); player.el.removeEventListener('pointerdown', player.tapHandler, true); player.tapHandler = null; }
     player.active = false;
     if (restore) restoreSnapshot();
   }
@@ -332,7 +332,7 @@
     var step = ch.steps[i];
     player.step = step;
     if (player.watchTimer) { clearInterval(player.watchTimer); player.watchTimer = null; }
-    if (player.tapHandler && player.el) { player.el.removeEventListener('click', player.tapHandler, true); player.tapHandler = null; }
+    if (player.tapHandler && player.el) { player.el.removeEventListener('click', player.tapHandler, true); player.el.removeEventListener('pointerdown', player.tapHandler, true); player.tapHandler = null; }
 
     var go = function () {
       resolveTarget(step, function (target) {
@@ -423,9 +423,16 @@
     setTimeout(function () { if (rid === player.runId) place(); }, 380); // スクロール後の位置で合わせ直す
     root.classList.toggle('nt-passthrough', (step.mode === 'tap' || step.mode === 'free') && !!target);
 
+    player.operated = false;
     if (step.mode === 'tap' && target) {
-      player.tapHandler = function () { setTimeout(function () { if (rid === player.runId) showStep(player.idx + 1); }, 60); };
-      target.addEventListener('click', player.tapHandler, true);
+      // tap は「操作だけさせる」形式: 押しても自動では進まない。操作を検知したら進むボタンの表示を変える
+      player.tapHandler = function () {
+        if (player.operated || rid !== player.runId) return;
+        player.operated = true;
+        var nb = actionsEl.querySelector('[data-a="next"]');
+        if (nb) { nb.textContent = (player.idx >= player.ch.steps.length - 1) ? 'おわる' : 'つぎへ →'; nb.classList.add('nt-primary'); }
+      };
+      target.addEventListener('pointerdown', player.tapHandler, true);
     }
 
     player.missingSince = 0;
@@ -435,7 +442,10 @@
       if (!document.contains(target)) { // 再描画で差し替わったら引き直す
         var fresh = null;
         try { fresh = document.querySelector(player.step.target); } catch (e) {}
-        if (fresh && fresh !== target) { target = fresh; player.el = fresh; place(); return; }
+        if (fresh && fresh !== target) {
+          if (player.tapHandler) { target.removeEventListener('pointerdown', player.tapHandler, true); fresh.addEventListener('pointerdown', player.tapHandler, true); }
+          target = fresh; player.el = fresh; place(); return;
+        }
       }
       var r = target.getBoundingClientRect();
       if (r.width === 0 || r.height === 0) {
@@ -464,7 +474,7 @@
   function renderActions(step) {
     var html = '';
     if (prevShownIdx() >= 0) html += '<button type="button" class="nt-tbtn" data-a="prev">← もどる</button>';
-    if (step.mode === 'tap') html += '<button type="button" class="nt-tbtn nt-primary" data-a="next">できない・つぎへ</button>';
+    if (step.mode === 'tap') html += '<button type="button" class="nt-tbtn" data-a="next">できない・つぎへ</button>';
     else html += '<button type="button" class="nt-tbtn nt-primary" data-a="next">' + (player.idx >= player.ch.steps.length - 1 ? 'おわる' : 'つぎへ →') + '</button>';
     html += '<button type="button" class="nt-tbtn nt-quiet" data-a="quit">✕</button>';
     actionsEl.innerHTML = html;
@@ -477,7 +487,7 @@
     saveRec();
     updateBadge();
     if (player.watchTimer) { clearInterval(player.watchTimer); player.watchTimer = null; }
-    if (player.tapHandler && player.el) { player.el.removeEventListener('click', player.tapHandler, true); player.tapHandler = null; }
+    if (player.tapHandler && player.el) { player.el.removeEventListener('click', player.tapHandler, true); player.el.removeEventListener('pointerdown', player.tapHandler, true); player.tapHandler = null; }
     restoreSnapshot();
     player.finished = true; // 層の管理上はプレイヤーを開いたままにし、戻る操作でメニューへ帰す
     showRoot();
