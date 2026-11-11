@@ -49,6 +49,9 @@ function ValuesEditor({
 }
 
 export function SettingsPanel({ settings, onUpdate }: Props) {
+  const [tutorialBtn, setTutorialBtn] = useState<boolean>(
+    () => (window as unknown as { NamaTutorial?: { isButtonVisible?: () => boolean } }).NamaTutorial?.isButtonVisible?.() ?? true,
+  )
   return (
     <div className="settings-panel">
       <h3 className="settings-title">設定</h3>
@@ -80,6 +83,21 @@ export function SettingsPanel({ settings, onUpdate }: Props) {
       <p className="settings-hint" style={{ marginTop: 16 }}>
         設定はこの端末のLocalStorageに保存されます。
       </p>
+
+      <div className="settings-group" style={{ marginTop: 20 }}>
+        <label className="settings-label">チュートリアル</label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={tutorialBtn}
+            onChange={(e) => {
+              setTutorialBtn(e.target.checked)
+              ;(window as unknown as { NamaTutorial?: { setButtonVisible?: (v: boolean) => void } }).NamaTutorial?.setButtonVisible?.(e.target.checked)
+            }}
+          />
+          案内ボタン（チュートリアル）を表示する
+        </label>
+      </div>
     </div>
   )
 }
