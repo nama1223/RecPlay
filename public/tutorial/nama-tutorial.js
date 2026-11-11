@@ -20,7 +20,7 @@
   var rec = loadRec();
   if (!rec.chapters) rec.chapters = {};
 
-  var ASSET_V = '13'; // 素材・キットの版。更新のたびに上げると端末側の古いキャッシュを確実に回避できる
+  var ASSET_V = '15'; // 素材・キットの版。更新のたびに上げると端末側の古いキャッシュを確実に回避できる
   function poseSrc(pose) { return IMG + 'N_' + pose + '.webp?v=' + ASSET_V; }
   function chapterById(id) { for (var i = 0; i < cfg.chapters.length; i++) if (cfg.chapters[i].id === id) return cfg.chapters[i]; return null; }
   function isDone(ch) { var r = rec.chapters[ch.id]; return !!(r && r.done && r.version >= (ch.since || 1)); }
@@ -453,7 +453,9 @@
       bubble.style.display = 'block';
       var bh = bubble.offsetHeight || 190;
       var top;
-      if (!rect) top = Math.max(12, (window.innerHeight - bh) / 2);
+      if (step.bubblePos === 'bottom') top = window.innerHeight - bh - 12;
+      else if (step.bubblePos === 'top') top = 12;
+      else if (!rect) top = Math.max(12, (window.innerHeight - bh) / 2);
       else if (bubbleBelow) top = Math.min(window.innerHeight - bh - 12, rect.bottom + 14);
       else top = Math.max(12, rect.top - bh - 14);
       bubble.style.top = top + 'px';
@@ -732,6 +734,18 @@
   function init() {
     buildDom();
     applyBtn();
+    // ポーズ画像を先読みしてキャッシュに温める（弱い回線で表示直前に取りに行くと読み込み不能表示になりやすいため）
+    ['wave', 'yay', 'thinking', 'question', 'thumbs_up', 'sparkle', 'fainted', 'left', 'right', 'up', 'up_left', 'up_right', 'down', 'down_left', 'down_right', 'run', 'panic', 'decay'].forEach(function (p) {
+      var im = new Image(); im.src = poseSrc(p);
+    });
+    // それでも失敗したら1回だけ自動で読み直す
+    charImg.addEventListener('load', function () { charImg._imgRetried = false; });
+    charImg.addEventListener('error', function () {
+      if (charImg._imgRetried) return;
+      charImg._imgRetried = true;
+      var src = charImg.src;
+      setTimeout(function () { charImg.src = src; }, 700);
+    });
     setInterval(applyBtn, 400); // ページ移動に追従してボタンの出し分けをする
     if (!rec.introSeen) {
       // 初回案内は「ボタンを出してよい画面」でのみ自動で開く（ログイン画面などでは開かず、対象画面に来るまで待つ）
