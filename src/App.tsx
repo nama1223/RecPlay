@@ -78,6 +78,34 @@ export default function App() {
   // { id, seq } — seq increments each tap so repeated taps on the same label still trigger scroll
   const [scrollTarget, setScrollTarget] = useState<{ id: string; seq: number } | null>(null)
 
+  // ── チュートリアル連携（橋渡し） ──────────────────────────────────
+  // ページID: files=ファイル一覧 / player=再生 / player-edit=編集 / player-settings=設定
+  const screenRef = useRef(screen)
+  screenRef.current = screen
+  const modeRef = useRef(mode)
+  modeRef.current = mode
+  const orgRef = useRef(org)
+  orgRef.current = org
+  useEffect(() => {
+    ;(window as unknown as { NamaTutorialBridge?: unknown }).NamaTutorialBridge = {
+      navigate: (id: string) => {
+        if (id === 'files') {
+          if (orgRef.current) setScreen('files')
+        } else if (id === 'player' || id === 'player-edit' || id === 'player-settings') {
+          setScreen('player')
+          setMode(id === 'player-edit' ? 'edit' : id === 'player-settings' ? 'settings' : 'play')
+        }
+      },
+      currentPage: () => {
+        const s = screenRef.current
+        if (s !== 'player') return s
+        const m = modeRef.current
+        return m === 'edit' ? 'player-edit' : m === 'settings' ? 'player-settings' : 'player'
+      },
+      snapshotKeys: () => ['recplay_settings'],
+    }
+  }, [setScreen])
+
   const {
     audioRef, currentTime, duration, isPlaying, src,
     togglePlayPause, seek, skip, playSection,
