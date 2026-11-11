@@ -14,7 +14,8 @@
 }
 #nt-root { position: fixed; inset: 0; z-index: 1000; display: none; pointer-events: none; }
 #nt-root.nt-open { display: block; }
-#nt-shield { position: absolute; inset: 0; background: rgba(10, 16, 22, 0.55); pointer-events: auto; }
+#nt-shield { position: absolute; inset: 0; background: transparent; pointer-events: auto; }
+#nt-root.nt-dim #nt-shield { background: rgba(10, 16, 22, 0.55); } /* 穴あき表示でない場面（パネル・対象なしステップ等）の時だけシールド側で暗くする */
 #nt-bubble, #nt-panel { pointer-events: auto; }
 #nt-root.nt-passthrough #nt-shield { display: none; }
 #nt-hl {

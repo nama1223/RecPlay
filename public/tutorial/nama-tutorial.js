@@ -20,7 +20,7 @@
   var rec = loadRec();
   if (!rec.chapters) rec.chapters = {};
 
-  var ASSET_V = '7'; // 素材・キットの版。更新のたびに上げると端末側の古いキャッシュを確実に回避できる
+  var ASSET_V = '9'; // 素材・キットの版。更新のたびに上げると端末側の古いキャッシュを確実に回避できる
   function poseSrc(pose) { return IMG + 'N_' + pose + '.webp?v=' + ASSET_V; }
   function chapterById(id) { for (var i = 0; i < cfg.chapters.length; i++) if (cfg.chapters[i].id === id) return cfg.chapters[i]; return null; }
   function isDone(ch) { var r = rec.chapters[ch.id]; return !!(r && r.done && r.version >= (ch.since || 1)); }
@@ -126,6 +126,7 @@
     if (angerEl) angerEl.style.display = 'none';
     root.classList.remove('nt-open');
     root.classList.remove('nt-passthrough');
+    root.classList.remove('nt-dim');
     bubble.style.display = 'none';
     panel.style.display = 'none';
     hl.style.display = 'none';
@@ -184,6 +185,7 @@
     bubble.style.display = 'none';
     hl.style.display = 'none';
     root.classList.remove('nt-passthrough');
+    root.classList.add('nt-dim');
     if (openLayers === 0) pushLayer();
     if (intro && !rec.introSeen) renderIntro();
     else renderMenu();
@@ -358,6 +360,7 @@
     panel.style.display = 'none';
     hl.style.display = 'none';
     root.classList.remove('nt-passthrough');
+    root.classList.add('nt-dim');
     charImg.src = poseSrc('wave');
     textEl.textContent = '（この項目は今の画面にないので、ここは飛ばしナマ）';
     chapNameEl.textContent = player.ch.title;
@@ -380,6 +383,7 @@
     gagReset();
     showRoot();
     panel.style.display = 'none';
+    root.classList.toggle('nt-dim', !target); // 対象がある時は穴あき（シールド透明＋ハイライトの影）だけにする
     var rect = null;
     if (target) {
       target.scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -417,7 +421,7 @@
     renderActions(step);
     requestAnimationFrame(place);
     setTimeout(function () { if (rid === player.runId) place(); }, 380); // スクロール後の位置で合わせ直す
-    root.classList.toggle('nt-passthrough', step.mode === 'tap' && !!target);
+    root.classList.toggle('nt-passthrough', (step.mode === 'tap' || step.mode === 'free') && !!target);
 
     if (step.mode === 'tap' && target) {
       player.tapHandler = function () { setTimeout(function () { if (rid === player.runId) showStep(player.idx + 1); }, 60); };
@@ -440,10 +444,9 @@
         return;
       }
       player.missingSince = 0;
-      hl.style.left = (r.left - 6) + 'px';
-      hl.style.top = (r.top - 6) + 'px';
-      hl.style.width = (r.width + 12) + 'px';
-      hl.style.height = (r.height + 12) + 'px';
+      // 対象の位置・大きさが変わったら（キーボード表示・回転・リサイズ等）吹き出しごと合わせ直す
+      var key = [r.left, r.top, r.width, r.height].join(',');
+      if (key !== player._lastRectKey) { player._lastRectKey = key; place(); }
     }, 250);
   }
 
@@ -479,6 +482,7 @@
     player.finished = true; // 層の管理上はプレイヤーを開いたままにし、戻る操作でメニューへ帰す
     showRoot();
     root.classList.remove('nt-passthrough');
+    root.classList.add('nt-dim');
     hl.style.display = 'none';
     panel.style.display = 'none';
     bubble.style.display = 'block';
