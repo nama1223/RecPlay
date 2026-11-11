@@ -20,7 +20,7 @@
   var rec = loadRec();
   if (!rec.chapters) rec.chapters = {};
 
-  var ASSET_V = '11'; // 素材・キットの版。更新のたびに上げると端末側の古いキャッシュを確実に回避できる
+  var ASSET_V = '13'; // 素材・キットの版。更新のたびに上げると端末側の古いキャッシュを確実に回避できる
   function poseSrc(pose) { return IMG + 'N_' + pose + '.webp?v=' + ASSET_V; }
   function chapterById(id) { for (var i = 0; i < cfg.chapters.length; i++) if (cfg.chapters[i].id === id) return cfg.chapters[i]; return null; }
   function isDone(ch) { var r = rec.chapters[ch.id]; return !!(r && r.done && r.version >= (ch.since || 1)); }
@@ -28,7 +28,7 @@
   function newCount() { return cfg.chapters.filter(isNew).length; }
 
   /* ── DOM ── */
-  var btn, root, shield, hl, bubble, charImg, textEl, chapNameEl, counterEl, actionsEl, panel;
+  var btn, root, shield, hl, dimSvg, dimPath, bubble, charImg, textEl, chapNameEl, counterEl, actionsEl, panel;
   function el(tag, id) { var e = document.createElement(tag); if (id) e.id = id; return e; }
 
   function buildDom() {
@@ -41,7 +41,8 @@
     btn.appendChild(bi);
     var badge = el('span'); badge.className = 'nt-badge'; badge.id = 'nt-badge'; badge.style.display = 'none';
     btn.appendChild(badge);
-    btn.addEventListener('click', function () { openPanel(false); });
+    btn.addEventListener('click', function () { if (btnDragged) { btnDragged = false; return; } openPanel(false); });
+    initBtnDrag();
     document.body.appendChild(btn);
 
     root = el('div', 'nt-root');
@@ -55,7 +56,13 @@
     panel = el('div', 'nt-panel');
     angerEl = el('div', 'nt-anger');
     angerEl.style.cssText = 'position:fixed;z-index:60;pointer-events:none;display:none;';
-    root.appendChild(shield); root.appendChild(hl); root.appendChild(bubble); root.appendChild(panel); root.appendChild(angerEl);
+    dimSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    dimSvg.id = 'nt-dimsvg';
+    dimPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    dimPath.setAttribute('fill', 'rgba(10,16,22,0.55)');
+    dimPath.setAttribute('fill-rule', 'evenodd');
+    dimSvg.appendChild(dimPath);
+    root.appendChild(shield); root.appendChild(dimSvg); root.appendChild(hl); root.appendChild(bubble); root.appendChild(panel); root.appendChild(angerEl);
     document.body.appendChild(root);
     // メニュー表示中だけ、エリア外タップで閉じる（説明が始まった後は閉じない）
     shield.addEventListener('click', function () {
@@ -129,7 +136,7 @@
     root.classList.remove('nt-dim');
     bubble.style.display = 'none';
     panel.style.display = 'none';
-    hl.style.display = 'none';
+    hl.style.display = 'none'; if (dimSvg) dimSvg.style.display = 'none';
   }
   function showRoot() {
     root.classList.add('nt-open');
@@ -183,7 +190,7 @@
     stopPlayer(false);
     showRoot();
     bubble.style.display = 'none';
-    hl.style.display = 'none';
+    hl.style.display = 'none'; if (dimSvg) dimSvg.style.display = 'none';
     root.classList.remove('nt-passthrough');
     root.classList.add('nt-dim');
     if (openLayers === 0) pushLayer();
@@ -194,7 +201,7 @@
   function showPanel() { // プレイヤーから戻る時に層を積み直さない表示
     showRoot();
     bubble.style.display = 'none';
-    hl.style.display = 'none';
+    hl.style.display = 'none'; if (dimSvg) dimSvg.style.display = 'none';
     root.classList.remove('nt-passthrough');
     renderMenu();
     panel.style.display = 'block';
@@ -381,7 +388,7 @@
     gagReset();
     showRoot();
     panel.style.display = 'none';
-    hl.style.display = 'none';
+    hl.style.display = 'none'; if (dimSvg) dimSvg.style.display = 'none';
     root.classList.remove('nt-passthrough');
     root.classList.add('nt-dim');
     charImg.src = poseSrc('wave');
@@ -415,15 +422,32 @@
       if (!player.active) return;
       rect = unionRect(player.els);
       var bubbleBelow = true;
-      if (rect) {
+      // 枠は要素ごとに独立して出し、暗転は穴あきSVGで一括（複数枠でも互いを暗くしない）
+      var rects = [];
+      (player.els || []).forEach(function (elm) {
+        if (!document.contains(elm)) return;
+        var r = elm.getBoundingClientRect();
+        if (r.width > 0 || r.height > 0) rects.push(r);
+      });
+      while (hl.children.length > rects.length) hl.removeChild(hl.lastChild);
+      while (hl.children.length < rects.length) { var bd = document.createElement('div'); bd.className = 'nt-hlbox'; hl.appendChild(bd); }
+      rects.forEach(function (r, i) {
+        var b = hl.children[i];
+        b.style.left = (r.left - 6) + 'px'; b.style.top = (r.top - 6) + 'px';
+        b.style.width = (r.width + 12) + 'px'; b.style.height = (r.height + 12) + 'px';
+      });
+      if (rects.length) {
+        var W = window.innerWidth, H = window.innerHeight;
+        var dAttr = 'M0 0 H' + W + ' V' + H + ' H0 Z';
+        rects.forEach(function (r) {
+          dAttr += ' M' + Math.max(0, r.left - 6) + ' ' + Math.max(0, r.top - 6) + ' H' + Math.min(W, r.right + 6) + ' V' + Math.min(H, r.bottom + 6) + ' H' + Math.max(0, r.left - 6) + ' Z';
+        });
+        dimPath.setAttribute('d', dAttr);
+        dimSvg.style.display = 'block';
         hl.style.display = 'block';
-        hl.style.left = (rect.left - 6) + 'px';
-        hl.style.top = (rect.top - 6) + 'px';
-        hl.style.width = (rect.width + 12) + 'px';
-        hl.style.height = (rect.height + 12) + 'px';
         bubbleBelow = (window.innerHeight - rect.bottom) >= 240 || rect.top < 240;
       } else {
-        hl.style.display = 'none';
+        hl.style.display = 'none'; if (dimSvg) dimSvg.style.display = 'none';
         bubbleBelow = true;
       }
       bubble.style.display = 'block';
@@ -437,6 +461,7 @@
       if (pose === 'point' && rect) pose = pointPose(rect, bubbleBelow);
       charImg.src = poseSrc(pose);
     };
+    player._place = place;
     charImg.src = poseSrc(step.pose === 'point' ? 'up' : (step.pose || 'wave'));
     textEl.textContent = step.text || '';
     chapNameEl.textContent = player.ch.title;
@@ -520,7 +545,7 @@
     showRoot();
     root.classList.remove('nt-passthrough');
     root.classList.add('nt-dim');
-    hl.style.display = 'none';
+    hl.style.display = 'none'; if (dimSvg) dimSvg.style.display = 'none';
     panel.style.display = 'none';
     bubble.style.display = 'block';
     bubble.style.top = Math.max(12, (window.innerHeight - 220) / 2) + 'px';
@@ -633,12 +658,58 @@
   }
 
   window.addEventListener('resize', function () {
-    if (player.active && player.el) {
-      var r = player.el.getBoundingClientRect();
-      hl.style.left = (r.left - 6) + 'px'; hl.style.top = (r.top - 6) + 'px';
-      hl.style.width = (r.width + 12) + 'px'; hl.style.height = (r.height + 12) + 'px';
-    }
+    if (player.active && player._place) player._place();
   });
+
+  /* ── 呼び出しボタンのドラッグ移動（位置は端末に保存） ── */
+  var btnDragged = false;
+  function setBtnPos(x, y) {
+    btn.style.left = x + 'px'; btn.style.top = y + 'px';
+    btn.style.right = 'auto'; btn.style.bottom = 'auto';
+  }
+  function applyBtnPos() {
+    if (!rec.btnPos || !btn) return;
+    var w = btn.offsetWidth || 62, h = btn.offsetHeight || 62;
+    var x = Math.round((rec.btnPos.fx || 0) * Math.max(0, window.innerWidth - w));
+    var y = Math.round((rec.btnPos.fy || 0) * Math.max(0, window.innerHeight - h));
+    setBtnPos(x, y);
+  }
+  function initBtnDrag() {
+    var drag = null;
+    btn.addEventListener('pointerdown', function (e) {
+      btnDragged = false; // 新しい押下で前回のドラッグ判定を持ち越さない
+      var r = btn.getBoundingClientRect();
+      drag = { sx: e.clientX, sy: e.clientY, left: r.left, top: r.top, moved: false };
+      try { btn.setPointerCapture(e.pointerId); } catch (err) {}
+    });
+    btn.addEventListener('pointermove', function (e) {
+      if (!drag) return;
+      var dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+      if (!drag.moved && Math.sqrt(dx * dx + dy * dy) < 8) return;
+      drag.moved = true; btnDragged = true;
+      var w = btn.offsetWidth || 62, h = btn.offsetHeight || 62;
+      setBtnPos(
+        Math.max(2, Math.min(window.innerWidth - w - 2, drag.left + dx)),
+        Math.max(2, Math.min(window.innerHeight - h - 2, drag.top + dy))
+      );
+    });
+    var end = function () {
+      if (drag && drag.moved) {
+        var r = btn.getBoundingClientRect();
+        var w = btn.offsetWidth || 62, h = btn.offsetHeight || 62;
+        rec.btnPos = {
+          fx: Math.max(0, Math.min(1, r.left / Math.max(1, window.innerWidth - w))),
+          fy: Math.max(0, Math.min(1, r.top / Math.max(1, window.innerHeight - h)))
+        };
+        saveRec();
+      }
+      drag = null;
+    };
+    btn.addEventListener('pointerup', end);
+    btn.addEventListener('pointercancel', end);
+    applyBtnPos();
+    window.addEventListener('resize', applyBtnPos);
+  }
 
   /* ── 呼び出しボタンの表示制御（表示ページ制限＋利用者のON/OFF） ── */
   function btnShouldShow() {

@@ -745,8 +745,8 @@
 .action-btn.exclude   { background: #2a1a2a; color: #e87878; }
 .action-btn.restore   { background: #1a3028; color: #5ecfb8; }
 .action-btn.normalize { background: #1a2038; color: #a0c8ff; border: 1px solid #2a3a6a; }
-.action-btn.delete    { background: #1e1e2a; color: #664455; }
-.action-btn.delete.compact { padding: 3px 12px; margin: 0; }
+.action-btn.delete    { background: #2e1420; color: #ff8fa0; border: 1px solid #5c2434; }
+.action-btn.delete.armed { background: #b02030; color: #fff; border-color: #b02030; font-weight: 700; }
 .action-btn:active { opacity: 0.7; }
 
 .download-all-btn {

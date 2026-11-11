@@ -56,6 +56,21 @@ export function SectionItem({
   }, [scrollTarget, section.id])
   const [editingLabel, setEditingLabel] = useState(false)
   const [labelVal, setLabelVal] = useState(section.label)
+  // 削除はダイアログでなく2回タップ確認（NamaKeのarmConfirm方式・5秒以内にもう一度タップで確定）
+  const [deleteArmed, setDeleteArmed] = useState(false)
+  const deleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => { if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current) }, [])
+  const handleDelete = () => {
+    if (!deleteArmed) {
+      setDeleteArmed(true)
+      if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current)
+      deleteTimerRef.current = setTimeout(() => setDeleteArmed(false), 5000)
+      return
+    }
+    if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current)
+    setDeleteArmed(false)
+    onDelete(section.id)
+  }
 
   const handleHeaderTap = () => {
     onActivate(section.id)
@@ -179,7 +194,6 @@ export function SectionItem({
                 duration={duration}
                 editAdjustValues={editAdjustValues}
                 onUpdate={onUpdate}
-                onClose={() => setExpanded(false)}
                 onPlay={onPlay}
               />
               {hasWaveform && !section.isExcluded && (
@@ -194,10 +208,10 @@ export function SectionItem({
                 </button>
               )}
               <button
-                className="action-btn delete compact"
-                onClick={() => { if (confirm(`「${section.label}」を削除しますか？`)) onDelete(section.id) }}
+                className={`action-btn delete${deleteArmed ? ' armed' : ''}`}
+                onClick={handleDelete}
               >
-                🗑 削除
+                {deleteArmed ? 'もう一度タップで削除' : 'この区間を削除'}
               </button>
             </>
           )}

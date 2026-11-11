@@ -23,7 +23,7 @@ window.NAMA_TUTORIAL_CONFIG = {
       ]
     },
     {
-      id: 'player', page: 'player', title: 'プレイヤー', desc: '再生・シーク・速度・区間リストの使い方', icon: 'yay', since: 4,
+      id: 'player', page: 'player', title: 'プレイヤー', desc: '再生・シーク・速度・区間リストの使い方', icon: 'yay', since: 5,
       steps: [
         { pose: 'wave', text: 'プレイヤーの章ナマ。曲を開いた状態だと、実際のボタンを光らせて案内できるナマ。ボタンは実際に押して試せるナマ。まだ曲を開いてない時は、先にファイル一覧から曲を選ぶナマ。' },
         { target: '.file-bar', pose: 'point', text: '上の帯にファイル名と時間が出るナマ。右側の☁は、区間の保存がサーバーと合っているかの印ナマ。' },
@@ -31,7 +31,7 @@ window.NAMA_TUTORIAL_CONFIG = {
         { target: '.play-btn', mode: 'tap', pose: 'point', text: '真ん中のボタンが再生と一時停止ナマ。押してみるナマ。このボタンを縦にスクロール／スワイプすると、再生速度を変えられナマ。遅くして練習する時に使うナマ。' },
         { target: '.playback-controls', mode: 'tap', pose: 'point', text: '再生ボタンの両脇が、少し戻る／少し進むのボタン群ナマ。秒数は設定モードで変えられナマ。いちばん端の⏮は、前の区間の頭へ戻るボタン。押してみるナマ。' },
         { target: '.section-list', mode: 'free', pose: 'point', text: '区間リストナマ。区間を押すと、そこだけ再生できナマ。長い録音の中で曲の頭出しをするのが主な使い方ナマ。各区間の「⬇ ダウンロード」では、その区間の音だけを保存できナマ。実際に押してみるナマ。' },
-        { target: ['.zoom-row', '.seekbar-wrapper'], mode: 'tap', pose: 'point', text: '波形の表示範囲はここのボタンで変えられナマ。1行に何秒分を表示するかの調節ナマ。広げると細かい場所が見やすく、縮めると全体の流れがつかめナマ。押してみるナマ。' },
+        { target: ['.zoom-row', '.seekbar-wrapper'], mode: 'tap', pose: 'point', text: '波形の表示範囲は、一番上にある「－」「＋」のボタンで変えられナマ。1行に何秒分を表示するかの調節ナマ。広げると細かい場所が見やすく、縮めると全体の流れがつかめナマ。押してみるナマ。' },
         { target: '.org-name-link', pose: 'point', text: '上の団体名を押すと、ファイル一覧へ戻りナマ。' },
         { page: 'player-settings', target: ['.mode-selector', '.settings-panel'], pose: 'point', text: '最後は設定モード（上の「設定」ボタンで切り替わりナマ）。スキップの秒数や、区間を細かく動かす幅を変えられナマ。設定はこの端末の中に保存されナマ。いちばん下には、案内ボタンの表示・非表示もありナマ。' }
       ]

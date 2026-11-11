@@ -7,11 +7,10 @@ interface Props {
   duration: number
   editAdjustValues: number[]
   onUpdate: (id: string, updates: Partial<Section>) => void
-  onClose: () => void
   onPlay: (start: number, end: number) => void
 }
 
-export function FlagEditor({ section, duration, editAdjustValues, onUpdate, onClose, onPlay }: Props) {
+export function FlagEditor({ section, duration, editAdjustValues, onUpdate, onPlay }: Props) {
   const [startInput, setStartInput] = useState(String(section.startTime.toFixed(1)))
   const [endInput, setEndInput] = useState(String(section.endTime.toFixed(1)))
 
@@ -53,8 +52,6 @@ export function FlagEditor({ section, duration, editAdjustValues, onUpdate, onCl
           onClick={() => onPlay(Math.max(section.startTime, section.endTime - 3), section.endTime)}
           title="終了位置の直前3秒を再生"
         >▶ ラスト3秒</button>
-        <span style={{ flex: 1 }} />
-        <button className="close-btn" onClick={onClose}>✕</button>
       </div>
 
       <div className="flag-editor-row">

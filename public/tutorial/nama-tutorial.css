@@ -4,6 +4,7 @@
   width: 62px; height: 62px; padding: 0; border: none; border-radius: 50%;
   background: #6ec6e8; cursor: pointer;
   box-shadow: 0 3px 10px rgba(0,0,0,0.35);
+  touch-action: none; /* ドラッグ移動のため */
 }
 #nt-btn img { width: 100%; height: 100%; display: block; border-radius: 50%; }
 #nt-btn .nt-badge {
@@ -18,12 +19,13 @@
 #nt-root.nt-dim #nt-shield { background: rgba(10, 16, 22, 0.55); } /* 穴あき表示でない場面（パネル・対象なしステップ等）の時だけシールド側で暗くする */
 #nt-bubble, #nt-panel { pointer-events: auto; }
 #nt-root.nt-passthrough #nt-shield { display: none; }
-#nt-hl {
-  position: fixed; display: none; pointer-events: none;
+#nt-hl { position: fixed; inset: 0; display: none; pointer-events: none; }
+.nt-hlbox {
+  position: fixed; pointer-events: none;
   border: 3px solid #ffd94d; border-radius: 10px;
-  box-shadow: 0 0 0 9999px rgba(10, 16, 22, 0.55);
   transition: top 0.18s, left 0.18s, width 0.18s, height 0.18s;
 }
+#nt-dimsvg { position: fixed; inset: 0; width: 100%; height: 100%; display: none; pointer-events: none; }
 #nt-bubble {
   position: fixed; left: 50%; transform: translateX(-50%);
   width: min(94vw, 430px); box-sizing: border-box;
