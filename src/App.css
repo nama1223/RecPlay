@@ -411,6 +411,15 @@
 }
 .pwa-install-btn:hover { background: #4a3a8a; }
 
+.pwa-installed-btn {
+  background: #241a45;
+  border-color: #3a2a6a;
+  color: #776aa8;
+  cursor: default;
+}
+.pwa-installed-btn:hover { background: #241a45; }
+.pwa-installed-btn:active { opacity: 1; }
+
 .skip-btn {
   padding: 6px 5px;
   border-radius: 10px;

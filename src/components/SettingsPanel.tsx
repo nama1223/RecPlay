@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { AppSettings, DEFAULT_SETTINGS } from '../types'
+import { PwaInstallButton } from './PwaInstallButton'
 
 interface Props {
   settings: AppSettings
@@ -97,6 +98,11 @@ export function SettingsPanel({ settings, onUpdate }: Props) {
           />
           案内ボタン（チュートリアル）を表示する
         </label>
+      </div>
+
+      <div className="settings-group" style={{ marginTop: 20 }}>
+        <label className="settings-label">アプリのインストール</label>
+        <PwaInstallButton />
       </div>
     </div>
   )
