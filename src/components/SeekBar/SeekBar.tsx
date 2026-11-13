@@ -304,7 +304,7 @@ export function SeekBar({
           className="resize-extreme-btn"
           onClick={() => setSeekbarHeight(MIN_SEEKBAR_H)}
           title="シークバーを縮小"
-        >▲</button>
+        >▲ 最小</button>
         <div
           className="resize-drag-zone"
           onPointerDown={handleResizeStart}
@@ -317,7 +317,7 @@ export function SeekBar({
           className="resize-extreme-btn"
           onClick={() => setSeekbarHeight(MAX_SEEKBAR_H())}
           title="シークバーを拡大"
-        >▼</button>
+        >▼ 最大</button>
       </div>
     </div>
   )
