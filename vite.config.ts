@@ -18,7 +18,7 @@ export default defineConfig({
         short_name: 'RecPlay',
         description: '録音共有・練習プレーヤー',
         theme_color: '#1e1253',
-        background_color: '#1e1253',
+        background_color: '#a86ea9',
         display: 'standalone',
         orientation: 'portrait',
         start_url: '.',
