@@ -15,7 +15,7 @@ window.NAMA_TUTORIAL_CONFIG = {
     {
       id: 'files', page: 'files', title: 'はじめに', desc: 'ファイル一覧の見方と、録音の選び方', icon: 'wave', since: 2,
       steps: [
-        { pose: 'wave', text: 'やあ！生物（ナマモノ）ナマ。RecPlayの案内役ナマ。この章では、録音ファイルの選び方を案内しナマ。先に言っておくと、この案内はいつでも✕ボタンでやめられるし、やめた後も右下のボタンから見直せナマ。' },
+        { pose: 'wave', text: 'やあやあ！我こそは生物[ナマモノ] ナマ。RecPlayの案内役ナマ。この章では、録音ファイルの選び方を案内しナマ。先に言っておくと、この案内はいつでも✕ボタンでやめられるし、やめた後も{{btnPos}}のボタンから見直せナマ。' },
         { target: '.file-sort-bar', pose: 'point', text: '並べ替えはここナマ。録音した順や名前順に変えられナマ。' },
         { target: '.upload-toggle-btn', pose: 'point', text: '新しい録音のアップロードはここからナマ。練習のたびに録音を足していく場所ナマ。' },
         { target: '.change-btn', pose: 'point', text: '団体の切り替えや、最初の画面に戻る時はこの「戻る」からナマ。' },
