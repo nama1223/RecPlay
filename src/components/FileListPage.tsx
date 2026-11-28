@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { WORKER_URL, buildWorkerAudioUrl } from '../config'
+import { confirmDialog, showToast } from './dialog'
 import { OrgInfo } from '../hooks/useOrgAuth'
 import { uploadToR2, UploadProgress } from '../utils/r2Upload'
 
@@ -194,7 +195,7 @@ export function FileListPage({ org, onFileSelect, onRename, onLogout }: Props) {
       setRenamingKey(null)
       load()
     } catch (e) {
-      alert(`名前変更に失敗しました: ${e}`)
+      showToast(`名前変更に失敗しました: ${e}`)
     } finally {
       setRenaming(false)
     }
@@ -223,7 +224,7 @@ export function FileListPage({ org, onFileSelect, onRename, onLogout }: Props) {
       setOwnKeys(getOwnKeys())
       load()
     } catch (e) {
-      alert(`複製に失敗しました: ${e}`)
+      showToast(`複製に失敗しました: ${e}`)
     } finally {
       setCopyingKey(null)
     }
@@ -232,7 +233,7 @@ export function FileListPage({ org, onFileSelect, onRename, onLogout }: Props) {
   // Delete handler
   const handleDelete = async (e: React.MouseEvent, file: AudioFile) => {
     e.stopPropagation()
-    if (!confirm(`「${file.name}」を削除しますか？\n\nこの操作は元に戻せません。`)) return
+    if (!(await confirmDialog(`「${file.name}」を削除しますか？\n\nこの操作は元に戻せません。`))) return
     setDeletingKey(file.key)
     try {
       const res = await fetch(`${WORKER_URL}/files?key=${encodeURIComponent(file.key)}`, {
@@ -243,7 +244,7 @@ export function FileListPage({ org, onFileSelect, onRename, onLogout }: Props) {
       setOwnKeys(getOwnKeys())
       load()
     } catch (e) {
-      alert(`削除に失敗しました: ${e}`)
+      showToast(`削除に失敗しました: ${e}`)
     } finally {
       setDeletingKey(null)
     }
@@ -422,7 +423,7 @@ export function FileListPage({ org, onFileSelect, onRename, onLogout }: Props) {
       setConfirmedDeleteKeys([])
       doUpload(fileToUpload)
     } catch (e) {
-      alert(`削除に失敗しました: ${e}`)
+      showToast(`削除に失敗しました: ${e}`)
     } finally {
       setDeletingOverflow(false)
     }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { WORKER_URL, R2_PUBLIC_URL } from '../config'
 import { OrgInfo } from './AuthPage'
+import { confirmDialog, showToast } from './dialog'
 
 interface AdminOrgInfo extends OrgInfo {
   totalSize?: number
@@ -101,7 +102,7 @@ export function AdminPage({ onLogout }: Props) {
   }
 
   const deleteOrg = async (org: AdminOrgInfo) => {
-    if (!confirm(`「${org.name}」を削除しますか？`)) return
+    if (!(await confirmDialog(`「${org.name}」を削除しますか？`))) return
     await fetch(`${WORKER_URL}/admin/orgs/${org.id}`, {
       method: 'DELETE',
       headers: authHeaders(),
@@ -111,7 +112,7 @@ export function AdminPage({ onLogout }: Props) {
   }
 
   const deleteFile = async (file: AudioFile) => {
-    if (!confirm(`「${file.name}」を削除しますか？（元に戻せません）`)) return
+    if (!(await confirmDialog(`「${file.name}」を削除しますか？（元に戻せません）`))) return
     await fetch(`${WORKER_URL}/admin/files/${encodeURIComponent(file.key)}`, {
       method: 'DELETE',
       headers: authHeaders(),
@@ -279,7 +280,7 @@ export function AdminPage({ onLogout }: Props) {
                       <button
                         className="icon-btn"
                         title="共有URLをコピー"
-                        onClick={() => { navigator.clipboard.writeText(shareUrl); alert('URLをコピーしました') }}
+                        onClick={() => { navigator.clipboard.writeText(shareUrl); showToast('URLをコピーしました') }}
                       >
                         📎
                       </button>

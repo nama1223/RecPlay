@@ -16,6 +16,7 @@ import { SettingsPanel } from './components/SettingsPanel'
 import { AuthPage } from './components/AuthPage'
 import { FileListPage } from './components/FileListPage'
 import { AdminPage } from './components/AdminPage'
+import { DialogHost, showToast, confirmDialog } from './components/dialog'
 import { formatTime } from './utils/timeFormat'
 import { AppMode, Section, ZOOM_LEVELS } from './types'
 import { R2_PUBLIC_URL, WORKER_URL, buildWorkerAudioUrl } from './config'
@@ -177,10 +178,10 @@ export default function App() {
           if (data.key) {
             handleKey(data.key)
           } else {
-            alert('ファイルが見つかりません（削除されたかURLが無効です）')
+            showToast('ファイルが見つかりません（削除されたかURLが無効です）')
           }
         })
-        .catch(() => alert('通信エラーが発生しました'))
+        .catch(() => showToast('通信エラーが発生しました'))
     } else if (urlParam) {
       const decoded = decodeURIComponent(urlParam)
       const key = keyFromUrl(decoded)
@@ -275,20 +276,21 @@ export default function App() {
 
     // Confirm / offer resume
     if (resumeInfo) {
-      const choice = confirm(
+      const choice = await confirmDialog(
         `前回の波形生成が ${resumeInfo.pct}% で中断されています。\n` +
-        `「OK」で続きから再開、「キャンセル」で最初からやり直します。`
+        `「OK」で続きから再開、「キャンセル」で最初からやり直します。`,
+        { confirmLabel: '続きから再開', cancelLabel: '最初から' }
       )
       if (!choice) clearWaveformResume(resumeKey)
     } else if (waveformStored) {
-      if (!confirm('波形データはすでに生成済みです。再生成しますか？')) return
+      if (!(await confirmDialog('波形データはすでに生成済みです。再生成しますか？'))) return
       clearWaveformResume(resumeKey)
     } else {
       const estMin = Math.ceil(numChunks * 8 / 60) // ~8s per chunk on average
-      if (!confirm(
+      if (!(await confirmDialog(
         `波形を生成します（${numChunks}チャンク、目安 ${estMin} 分）。\n` +
         `途中で中断しても次回「🎵」を押すと再開できます。\n\n続けますか？`
-      )) return
+      ))) return
     }
 
     setWaveformGenerating(true)
@@ -313,7 +315,7 @@ export default function App() {
         body,
       })
     } catch (e) {
-      alert(`波形生成に失敗しました: ${e}`)
+      showToast(`波形生成に失敗しました: ${e}`)
     } finally {
       setWaveformGenerating(false)
     }
@@ -352,11 +354,11 @@ export default function App() {
     }
 
     const estMin = Math.ceil(duration / 300 * 8 / 60)
-    if (!confirm(
+    if (!(await confirmDialog(
       `ファイル全体をノーマライズして R2 を上書きします。\n\n` +
       `現在のピーク: ${peakDb.toFixed(1)} dBFS\n${gainLine}\n\n` +
       `目安: ${estMin} 分程度\n続けますか？`
-    )) return
+    ))) return
 
     setNormalizing(true)
     setNormPct(0)
@@ -372,7 +374,7 @@ export default function App() {
       const bust = src.includes('?') ? `${src}&_r=${Date.now()}` : `${src}?_r=${Date.now()}`
       loadUrl(bust)
     } catch (e) {
-      alert(`ノーマライズに失敗しました: ${e}`)
+      showToast(`ノーマライズに失敗しました: ${e}`)
     } finally {
       setNormalizing(false)
     }
@@ -386,13 +388,13 @@ export default function App() {
     const newDur = Math.round(duration * RATIO)
     const fmt = (s: number) => `${Math.floor(s / 3600)}h${Math.floor((s % 3600) / 60)}m${Math.floor(s % 60)}s`
 
-    if (!confirm(
+    if (!(await confirmDialog(
       `44.1kHz誤エンコードされたファイルを48kHzに修復します。\n\n` +
       `現在の長さ: ${fmt(duration)}\n` +
       `修復後の長さ: ${fmt(newDur)}（約 ${(RATIO * 100).toFixed(1)}% に縮小）\n\n` +
       `区間の開始・終了位置も同じ比率で縮小されます。\n` +
       `※ すでに正しい48kHzのファイルに実行すると壊れます。\n\n続けますか？`
-    )) return
+    ))) return
 
     setNormalizing(true)
     setNormPct(0)
@@ -412,7 +414,7 @@ export default function App() {
       const bust = src.includes('?') ? `${src}&_r=${Date.now()}` : `${src}?_r=${Date.now()}`
       loadUrl(bust)
     } catch (e) {
-      alert(`修復に失敗しました: ${e}`)
+      showToast(`修復に失敗しました: ${e}`)
     } finally {
       setNormalizing(false)
     }
@@ -435,11 +437,11 @@ export default function App() {
   const handleNormalizeAll = useCallback(async () => {
     if (!src || !fileKey || duration <= 0) return
     const playSections = sections.filter((s) => !s.isExcluded)
-    if (playSections.length === 0) { alert('再生区間がありません'); return }
-    if (!confirm(
+    if (playSections.length === 0) { showToast('再生区間がありません'); return }
+    if (!(await confirmDialog(
       `全ての再生区間（${playSections.length} 件）のピークを個別に検出し、\n` +
       `1回のエンコードでまとめてノーマライズします。\n\n続けますか？`
-    )) return
+    ))) return
 
     setNormAllActive(true)
     setNormPct(0)
@@ -458,7 +460,7 @@ export default function App() {
       const bust = src.includes('?') ? `${src}&_r=${Date.now()}` : `${src}?_r=${Date.now()}`
       loadUrl(bust)
     } catch (e) {
-      alert(`ノーマライズに失敗しました: ${e}`)
+      showToast(`ノーマライズに失敗しました: ${e}`)
     } finally {
       setNormAllActive(false)
       setNormalizing(false)
@@ -493,6 +495,7 @@ export default function App() {
   return (
     <>
       <audio ref={audioRef} src={src ?? undefined} preload="metadata" />
+      <DialogHost />
 
       {screen === 'auth' && (
         <AuthPage
@@ -534,7 +537,7 @@ export default function App() {
                           const timeStr = parts[1].split('_')[0]
                           const shortId = `${orgId}-${timeStr}`
                           const url = `${location.origin}${location.pathname}?id=${shortId}&openExternalBrowser=1`
-                          navigator.clipboard.writeText(url).then(() => alert('URLをコピーしました'))
+                          navigator.clipboard.writeText(url).then(() => showToast('URLをコピーしました'))
                           setWaveMenuOpen(false)
                         }}
                       >

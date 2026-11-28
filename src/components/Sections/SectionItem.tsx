@@ -4,6 +4,7 @@ import { formatTime } from '../../utils/timeFormat'
 import { FlagEditor } from './FlagEditor'
 import { downloadClip } from '../../utils/mp3Download'
 import { normalizeSection, NormPhase } from '../../utils/normalize'
+import { showToast } from '../dialog'
 
 interface Props {
   section: Section
@@ -95,7 +96,7 @@ export function SectionItem({
     try {
       await downloadClip(audioSrc, section.startTime, section.endTime, duration, `${fileName ? fileName + '_' : ''}${section.label}.mp3`)
     } catch (e) {
-      alert(`ダウンロードに失敗しました: ${e}`)
+      showToast(`ダウンロードに失敗しました: ${e}`)
     } finally {
       setDownloading(false)
     }
@@ -122,7 +123,7 @@ export function SectionItem({
       )
       onNormalized?.()  // updates peakLevel + reloads audio in App
     } catch (e) {
-      alert(`ノーマライズに失敗しました: ${e}`)
+      showToast(`ノーマライズに失敗しました: ${e}`)
     } finally {
       setNormalizing(false)
     }

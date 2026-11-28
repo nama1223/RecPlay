@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Section, AppMode } from '../../types'
 import { SectionItem } from './SectionItem'
 import { downloadWithExcludes } from '../../utils/mp3Download'
+import { showToast } from '../dialog'
 
 type FilterMode = 'all' | 'play' | 'exclude'
 type SortMode = 'registration' | 'startTime'
@@ -97,7 +98,7 @@ export function SectionList({
     try {
       await downloadWithExcludes(audioSrc, sections, duration, `${fileName ? fileName + '_' : ''}録音_編集済み.mp3`)
     } catch (e) {
-      alert(`ダウンロードに失敗しました: ${e}`)
+      showToast(`ダウンロードに失敗しました: ${e}`)
     } finally {
       setDlAll(false)
     }
